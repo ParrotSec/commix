@@ -1,0 +1,3 @@
+src/ usr/share/commix/
+commix.py /usr/share/commix/
+debian/helper-script/* /usr/bin/

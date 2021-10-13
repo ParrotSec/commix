@@ -1,0 +1,271 @@
+commix (3.3-0parrot1) lts-updates; urgency=medium
+
+  * Rebuild package for Parrot 5.0.
+
+ -- Lorenzo "Palinuro" Faletra <palinuro@parrotsec.org>  Wed, 13 Oct 2021 14:55:02 +0200
+
+commix (3.3-0kali1) kali-dev; urgency=medium
+
+  * New upstream version 3.3
+  * Refresh patches
+
+ -- Sophie Brun <sophie@offensive-security.com>  Tue, 14 Sep 2021 09:43:06 +0200
+
+commix (3.2-0kali1) kali-dev; urgency=medium
+
+  [ Ben Wilson ]
+  * Consistency with install file
+
+  [ Sophie Brun ]
+  * New upstream version 3.2
+  * Refresh patches
+  * Update debian/copyright
+  * Update docs installation
+  * Add a patch to change output dir location
+
+ -- Sophie Brun <sophie@offensive-security.com>  Tue, 13 Apr 2021 09:32:23 +0200
+
+commix (3.1-0kali1) kali-dev; urgency=medium
+
+  * New upstream version 3.1
+  * Refresh patches
+  * Update date in debian/copyright
+  * Update required version of unicorn-magic
+  * Update installation for new usptream release
+  * Bump Standards-Version to 4.5.0
+
+ -- Sophie Brun <sophie@offensive-security.com>  Mon, 29 Jun 2020 14:26:26 +0200
+
+commix (3.0-20191111-0kali1) kali-dev; urgency=medium
+
+  [ Sophie Brun ]
+  * Add Restrictions: superficial in autopkgtest
+  * New upstream version 3.0-20191111
+  * Refresh patches
+  * Update debian/copyright
+  * Switch to Python 3
+  * Bump Standards-Version to 4.4.1
+  * Force to update to latest univorn-magic version in Python3
+  * Add a patch to fix a Python3 syntax error
+
+  [ Raphaël Hertzog ]
+  * Add GitLab's CI configuration file
+  * Configure git-buildpackage for Kali
+  * Update URL in GitLab's CI configuration file
+
+ -- Sophie Brun <sophie@offensive-security.com>  Tue, 12 Nov 2019 15:34:48 +0100
+
+commix (2.9-20190626-0kali1) kali-dev; urgency=medium
+
+  [ Raphaël Hertzog ]
+  * Update Vcs-* fields for the move to gitlab.com
+
+  [ Sophie Brun ]
+  * New upstream version 2.9-20190626
+
+ -- Sophie Brun <sophie@offensive-security.com>  Fri, 28 Jun 2019 10:33:33 +0200
+
+commix (2.8-20190326-0kali1) kali-dev; urgency=medium
+
+  * New upstream version 2.8-20190326
+
+ -- Sophie Brun <sophie@offensive-security.com>  Thu, 28 Mar 2019 10:14:05 +0100
+
+commix (2.7-20181218-0kali1) kali-dev; urgency=medium
+
+  * New upstream version 2.7-20181218
+
+ -- Sophie Brun <sophie@offensive-security.com>  Wed, 19 Dec 2018 11:48:05 +0100
+
+commix (2.6-20180921-0kali2) kali-dev; urgency=medium
+
+  * Remove useless dependencies on python-colorama and python-beautifulsoup:
+    we are using the embedded files (they have been modified for this package)
+
+ -- Sophie Brun <sophie@freexian.com>  Mon, 15 Oct 2018 15:21:56 +0200
+
+commix (2.6-20180921-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Fri, 21 Sep 2018 14:11:18 +0200
+
+commix (2.5-20180713-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Fri, 13 Jul 2018 15:23:39 +0200
+
+commix (2.4-20180521-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Tue, 22 May 2018 10:04:21 +0200
+
+commix (2.3-20180307-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Thu, 08 Mar 2018 14:46:51 +0100
+
+commix (2.2-20171212-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+  * Add a patch to fix usage example
+
+ -- Sophie Brun <sophie@freexian.com>  Wed, 13 Dec 2017 11:32:13 +0100
+
+commix (2.1-20171003-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Tue, 03 Oct 2017 09:04:38 +0200
+
+commix (2.0-20170714-0kali2) kali-dev; urgency=medium
+
+  * Change the dependency: python-unicorn to unicorn-magic
+
+ -- Sophie Brun <sophie@freexian.com>  Thu, 28 Sep 2017 15:45:41 +0200
+
+commix (2.0-20170714-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Mon, 17 Jul 2017 10:53:46 +0200
+
+commix (1.9-20170502-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Thu, 04 May 2017 15:17:49 +0200
+
+commix (1.8-20170315-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+  * Add a link to use packaged python-unicorn instead of downloading it in
+    thirdparty
+  * Don't use packaged colorama or beautifulsoup because upstream made few
+    changes
+
+ -- Sophie Brun <sophie@freexian.com>  Thu, 16 Mar 2017 10:11:35 +0100
+
+commix (1.7-20170203-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Mon, 06 Feb 2017 14:58:59 +0100
+
+commix (1.6-20161228-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Thu, 05 Jan 2017 10:57:06 +0100
+
+commix (1.5-20161117-0kali1) kali-dev; urgency=medium
+
+  * Import new usptream release
+
+ -- Sophie Brun <sophie@freexian.com>  Fri, 18 Nov 2016 12:03:01 +0100
+
+commix (1.4-20161017-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Thu, 20 Oct 2016 14:40:04 +0200
+
+commix (1.3-20160914-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Fri, 16 Sep 2016 09:08:45 +0200
+
+commix (1.2-20160812-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+  * Update debian/copyright
+  * Refresh patch
+
+ -- Sophie Brun <sophie@freexian.com>  Tue, 16 Aug 2016 15:03:17 +0200
+
+commix (1.1-20160714-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Wed, 20 Jul 2016 14:37:56 +0200
+
+commix (1.0-20160614-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Fri, 17 Jun 2016 10:42:56 +0200
+
+commix (0.9b-20160607-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Wed, 08 Jun 2016 09:58:42 +0200
+
+commix (0.8b-20160506-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Mon, 09 May 2016 15:44:32 +0200
+
+commix (0.7b-20160418-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Tue, 19 Apr 2016 09:16:20 +0200
+
+commix (0.6b-20160401-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+  * Refresh patch
+
+ -- Sophie Brun <sophie@freexian.com>  Thu, 07 Apr 2016 11:20:40 +0200
+
+commix (0.5b-20160316-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Thu, 17 Mar 2016 10:22:19 +0100
+
+commix (0.4.1b-20160226-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+  * Refresh patch
+
+ -- Sophie Brun <sophie@freexian.com>  Thu, 03 Mar 2016 11:00:32 +0100
+
+commix (0.4b-20160204-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Thu, 11 Feb 2016 09:23:11 +0100
+
+commix (0.3b-20160115-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release
+
+ -- Sophie Brun <sophie@freexian.com>  Fri, 22 Jan 2016 11:50:21 +0100
+
+commix (0.3b-0kali2) kali-dev; urgency=medium
+
+  * Fix patch (Closes: 0002967)
+
+ -- Sophie Brun <sophie@freexian.com>  Mon, 04 Jan 2016 09:25:18 +0100
+
+commix (0.3b-0kali1) kali-dev; urgency=medium
+
+  * Import new upstream release 
+  * Update debian/watch
+  * Fix the helper-script
+  * Add a patch to disable the options "install" and "update"
+
+ -- Sophie Brun <sophie@freexian.com>  Wed, 30 Dec 2015 17:31:15 +0100
+
+commix (0.2b+git20151106-0kali1) kali-dev; urgency=low
+
+  * Initial release (Closes: 0002201)
+
+ -- Sophie Brun <sophie@freexian.com>  Fri, 06 Nov 2015 15:21:08 +0100

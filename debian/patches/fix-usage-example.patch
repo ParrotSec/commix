@@ -1,0 +1,21 @@
+From: Kali Developers <devel@kali.org>
+Date: Tue, 12 Nov 2019 15:41:43 +0100
+Subject: fix-usage-example
+
+---
+ src/utils/menu.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/utils/menu.py b/src/utils/menu.py
+index 8df8dcc..e9d4f18 100755
+--- a/src/utils/menu.py
++++ b/src/utils/menu.py
+@@ -44,7 +44,7 @@ Copyright © """ + settings.YEAR + """ """ + settings.AUTHOR + Style.RESET_ALL +
+ 
+ _ = os.path.normpath(sys.argv[0])
+ 
+-usage = "python %prog [option(s)]"
++usage = "commix [option(s)]"
+ 
+ parser = OptionParser(usage=usage)
+ 

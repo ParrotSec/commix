@@ -1,0 +1,3 @@
+version=3
+opts="filenamemangle=s/.*\/v?(.*)\.tar\.gz/commix-$1.tar.gz/" \
+https://github.com/commixproject/commix/tags .*/v?(.*)\.tar\.gz

@@ -1,0 +1,137 @@
+From: Sophie Brun <sophie@freexian.com>
+Date: Tue, 12 Nov 2019 15:41:43 +0100
+Subject: Disable update and install via the menu
+
+Forwarded: not-needed
+Last-Update: 2021-04-13
+
+We don't want that the user update or (re)install commix via the commix
+menu. Updates and installations have to be done with apt.
+---
+ commix.py                      |  2 +-
+ src/core/main.py               | 24 ++++++++++++------------
+ src/core/shells/reverse_tcp.py |  2 +-
+ src/utils/menu.py              | 18 +++++++++---------
+ 4 files changed, 23 insertions(+), 23 deletions(-)
+
+diff --git a/commix.py b/commix.py
+index 63b7f7e..b4aa884 100755
+--- a/commix.py
++++ b/commix.py
+@@ -47,4 +47,4 @@ if __name__ == '__main__':
+     from src.utils import common
+     common.unhandled_exception()
+ 
+-# eof
+\ No newline at end of file
++# eof
+diff --git a/src/core/main.py b/src/core/main.py
+index e4aec04..2322969 100644
+--- a/src/core/main.py
++++ b/src/core/main.py
+@@ -28,10 +28,10 @@ from src.thirdparty.six.moves import urllib as _urllib
+ from src.utils import menu
+ from src.utils import logs
+ from src.utils import purge
+-from src.utils import update
++#from src.utils import update
+ from src.utils import common
+ from src.utils import version
+-from src.utils import install
++#from src.utils import install
+ from src.utils import crawler
+ from src.utils import settings
+ from src.utils import session_handler
+@@ -668,19 +668,19 @@ try:
+       raise SystemExit()
+       
+     # Check if defined "--update" option.        
+-    if menu.options.update:
+-      update.updater()
++#    if menu.options.update:
++#      update.updater()
+         
+     # Check if defined "--install" option.        
+-    if menu.options.install:
+-      install.installer()
+-      raise SystemExit()
++#    if menu.options.install:
++#      install.installer()
++#      raise SystemExit()
+ 
+     # Check for missing mandatory option(s).
+     if not any((menu.options.url, menu.options.logfile, menu.options.bulkfile, \
+                 menu.options.requestfile, menu.options.sitemap_url, menu.options.wizard, \
+-                menu.options.update, menu.options.list_tampers, menu.options.purge, menu.options.noncore_dependencies)):
+-      err_msg = "Missing a mandatory option (-u, -l, -m, -r, -x, --wizard, --update, --list-tampers, --purge or --dependencies). "
++                menu.options.list_tampers, menu.options.purge, menu.options.noncore_dependencies)):
++      err_msg = "Missing a mandatory option (-u, -l, -m, -r, -x, --wizard, --list-tampers, --purge or --dependencies). "
+       err_msg += "Use -h for help."
+       print(settings.print_critical_msg(err_msg))
+       raise SystemExit()
+@@ -836,8 +836,8 @@ try:
+       settings.CHECK_FOR_UPDATES_ON_START = False
+       
+     # Check if ".git" exists and check for updated version!
+-    if os.path.isdir("./.git") and settings.CHECK_FOR_UPDATES_ON_START:
+-      update.check_for_update()
++#    if os.path.isdir("./.git") and settings.CHECK_FOR_UPDATES_ON_START:
++#      update.check_for_update()
+ 
+     # Check if option is "-m" for multiple urls test.
+     if menu.options.bulkfile:
+@@ -941,4 +941,4 @@ except EOFError:
+   print(settings.print_error_msg(err_msg))
+   raise SystemExit()
+ 
+-# eof
+\ No newline at end of file
++# eof
+diff --git a/src/core/shells/reverse_tcp.py b/src/core/shells/reverse_tcp.py
+index 981d36c..ebac884 100755
+--- a/src/core/shells/reverse_tcp.py
++++ b/src/core/shells/reverse_tcp.py
+@@ -573,7 +573,7 @@ Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use TrustedSec's
+                       break 
+               except:
+                 unicorn_version = "" 
+-              update.check_unicorn_version(unicorn_version)
++#              update.check_unicorn_version(unicorn_version)
+               try:
+                 if len(unicorn_version) == 0:
+                   unicorn_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../', 'thirdparty/unicorn'))
+diff --git a/src/utils/menu.py b/src/utils/menu.py
+index 237b7c4..8df8dcc 100755
+--- a/src/utils/menu.py
++++ b/src/utils/menu.py
+@@ -59,21 +59,21 @@ general.add_option("-v",
+                 dest="verbose",
+                 help="Verbosity level (0-4, Default: 0).")
+ 
+-general.add_option("--install",
+-                action="store_true",
+-                dest="install",
+-                default=False,
+-                help="Install 'commix' to your system.")
++#general.add_option("--install",
++#                action="store_true",
++#                dest="install",
++#                default=False,
++#                help="Install 'commix' to your system.")
+ 
+ general.add_option("--version",
+                 action="store_true",
+                 dest="version",
+                 help="Show version number and exit.")
+ 
+-general.add_option("--update", 
+-                action="store_true",
+-                dest="update",
+-                help="Check for updates (apply if any) and exit.")
++#general.add_option("--update",
++#                action="store_true",
++#                dest="update",
++#                help="Check for updates (apply if any) and exit.")
+ 
+ general.add_option("--output-dir", 
+                 action="store",

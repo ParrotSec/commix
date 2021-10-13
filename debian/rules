@@ -1,0 +1,12 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --with python3 --buildsystem=pybuild
+
+override_dh_python3:
+	dh_python3 --shebang='/usr/bin/env python3'
+
+override_dh_auto_install:
+	#don't auto_install files with pybuild: eveything is installed under /usr/lib/python3/dist-packages/src instead of /usr/lib/python3/dist-packages/commix. 
+	# We can change the install path but all the import are "from src"
+	# so they will fail
