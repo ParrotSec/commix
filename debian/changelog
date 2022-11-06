@@ -1,3 +1,9 @@
+commix (3.5-0parrot3) parrot-updates; urgency=medium
+
+  * Properly disable install and update modules.
+
+ -- Lorenzo "Palinuro" Faletra <palinuro@parrotsec.org>  Sun, 06 Nov 2022 19:12:36 +0100
+
 commix (3.5-0parrot2) parrot-updates; urgency=medium
 
   * Don't disable needed modules.
