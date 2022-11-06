@@ -6,11 +6,11 @@ Subject: fix-usage-example
  src/utils/menu.py | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/src/utils/menu.py b/src/utils/menu.py
-index 8df8dcc..e9d4f18 100755
---- a/src/utils/menu.py
-+++ b/src/utils/menu.py
-@@ -44,7 +44,7 @@ Copyright © """ + settings.YEAR + """ """ + settings.AUTHOR + Style.RESET_ALL +
+Index: commix/src/utils/menu.py
+===================================================================
+--- commix.orig/src/utils/menu.py
++++ commix/src/utils/menu.py
+@@ -45,7 +45,7 @@ Copyright © """ + settings.YEAR + """ "
  
  _ = os.path.normpath(sys.argv[0])
  

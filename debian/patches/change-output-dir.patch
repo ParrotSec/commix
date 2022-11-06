@@ -1,0 +1,15 @@
+Description: Change output directory
+Author: Lorenzo "Palinuro" Faletra <palinuro@parrotsec.org>
+Last-Update: 2022-11-06
+
+--- commix-3.5.orig/src/utils/settings.py
++++ commix-3.5/src/utils/settings.py
+@@ -397,7 +397,7 @@ ISSUES_PAGE = "https://github.com/commix
+ COMMIX_ROOT_PATH = os.path.abspath(os.curdir)
+ 
+ # Output Directory
+-OUTPUT_DIR = ".output/"  
++OUTPUT_DIR = "~/.commix/output/"  
+ 
+ # Output file name
+ OUTPUT_FILE_NAME = "logs"

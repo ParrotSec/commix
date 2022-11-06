@@ -1,3 +1,3 @@
-disable-install-and-update.patch
 fix-usage-example.patch
-change-output-dir-location.patch
+disable-install-update.patch
+change-output-dir.patch

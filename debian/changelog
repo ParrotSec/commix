@@ -1,3 +1,9 @@
+commix (3.5-0parrot1) parrot-updates; urgency=medium
+
+  * New upstream version 3.5.
+
+ -- Lorenzo "Palinuro" Faletra <palinuro@parrotsec.org>  Sun, 06 Nov 2022 16:59:33 +0100
+
 commix (3.3-0parrot1) lts-updates; urgency=medium
 
   * Rebuild package for Parrot 5.0.
