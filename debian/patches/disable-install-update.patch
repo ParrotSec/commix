@@ -4,19 +4,6 @@ Last-Update: 2022-11-06
 
 --- commix-3.5.orig/src/core/main.py
 +++ commix-3.5/src/core/main.py
-@@ -27,10 +27,10 @@ from src.thirdparty.six.moves import url
- from src.utils import menu
- from src.utils import logs
- from src.utils import purge
--from src.utils import update
-+#from src.utils import update
- from src.utils import common
- from src.utils import version
--from src.utils import install
-+#from src.utils import install
- from src.utils import crawler
- from src.utils import settings
- from src.core.requests import parameters
 @@ -635,13 +635,13 @@ try:
        raise SystemExit()
        

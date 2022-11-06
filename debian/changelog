@@ -1,3 +1,9 @@
+commix (3.5-0parrot2) parrot-updates; urgency=medium
+
+  * Don't disable needed modules.
+
+ -- Lorenzo "Palinuro" Faletra <palinuro@parrotsec.org>  Sun, 06 Nov 2022 17:45:34 +0100
+
 commix (3.5-0parrot1) parrot-updates; urgency=medium
 
   * New upstream version 3.5.
