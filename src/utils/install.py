@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@ import sys
 import platform
 import subprocess
 from src.utils import menu
+from src.utils import common
 from src.utils import settings
 from src.utils import requirments
 from src.thirdparty.six.moves import input as _input
@@ -58,12 +59,11 @@ def installer():
   sys.stdout.flush()
   
   # Check if OS is Linux.
-  if platform.system() == "Linux":
-    
-    # You need to have root privileges to run this script
-    if os.geteuid() != 0:
+  if settings.PLATFORM == "posix":
+    # You need to have administrative privileges to run this script.
+    if not common.running_as_admin():
       print(settings.SINGLE_WHITESPACE) 
-      err_msg = "You need to have root privileges to run this option!"
+      err_msg = "You need to have administrative privileges to run this option."
       print(settings.print_critical_msg(err_msg))
       raise SystemExit()
       
@@ -74,13 +74,8 @@ def installer():
       warn_msg += " is already installed in your system."
       print(settings.print_warning_msg(warn_msg))
       while True:
-        if not menu.options.batch:
-          question_msg = "Do you want to remove commix? [Y/n] > "
-          uninstall = _input(settings.print_question_msg(question_msg))
-        else:
-          uninstall = "" 
-        if len(uninstall) == 0:
-           uninstall = "Y"
+        message = "Do you want to remove commix? [Y/n] > "
+        uninstall = common.read_input(message, default="Y", check_batch=True)
         if uninstall in settings.CHOICE_YES:
           uninstaller()
           raise SystemExit()
@@ -88,8 +83,7 @@ def installer():
         uninstall in settings.CHOICE_QUIT: 
           raise SystemExit()
         else:
-          err_msg = "'" + uninstall + "' is not a valid answer."
-          print(settings.print_error_msg(err_msg))
+          common.invalid_option(uninstall)
           pass
       
     # Check for git.
@@ -107,7 +101,7 @@ def installer():
         err_msg = "The installer is not designed for any "
         err_msg += "other Linux distro than Ubuntu / Debian. " 
         err_msg += "Please install manually: " + dependencies
-        print(Back.RED + err_msg + Style.RESET_ALL)
+        print(settings.print_critical_msg(err_msg))
         print(settings.SINGLE_WHITESPACE)
         raise SystemExit()
         

@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@ from src.utils import settings
 
 """
 About: Adds double quotes around of the generated payloads (nested).
-Notes: This tamper script works against *nix targets.
+Notes: This tamper script works against Unix-like target(s).
 """
 
 __tamper__ = "nested"
@@ -48,25 +48,10 @@ def tamper(payload):
       
   if settings.TARGET_OS != "win":
     if settings.EVAL_BASED_STATE != False:
-      if settings.TRANFROM_PAYLOAD == None:
-        settings.TRANFROM_PAYLOAD = False
-        warn_msg = "The dynamic code evaluation technique, does not support the '"+ __tamper__  +".py' tamper script."
-        sys.stdout.write("\r" + settings.print_warning_msg(warn_msg))
-        sys.stdout.flush() 
-        print
+      return payload
     else:
-      settings.TRANFROM_PAYLOAD = True
-      if settings.TRANFROM_PAYLOAD:
-        payload = nested(payload)
-
+      return nested(payload)
   else:
-    if settings.TRANFROM_PAYLOAD == None:
-      settings.TRANFROM_PAYLOAD = False
-      warn_msg = "Windows target host(s), does not support the '"+ __tamper__  +".py' tamper script."
-      sys.stdout.write("\r" + settings.print_warning_msg(warn_msg))
-      sys.stdout.flush() 
-      print
+    return payload
 
-  return payload
-  
 # eof 

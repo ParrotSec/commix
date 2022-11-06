@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -42,14 +42,14 @@ def do_GET_check(url, http_request_method):
   # Check for REST-ful URLs format. 
   if "?" not in url:
     if settings.INJECT_TAG not in url and not menu.options.shellshock:
-      if menu.options.level == 3 or menu.options.header or menu.options.headers:
+      if menu.options.level == settings.HTTP_HEADER_INJECTION_LEVEL or menu.options.header or menu.options.headers:
         return False
-      if menu.options.level == 2 :
+      if menu.options.level == settings.COOKIE_INJECTION_LEVEL :
         return False
       else: 
         err_msg = "No parameter(s) found for testing on the provided target URL. "
         err_msg += "You must specify the testable parameter(s) and/or "
-        err_msg += "try to increase '--level' values to perform more tests (i.e 'User-Agent', 'Referer', 'Host', 'Cookie' etc)." 
+        err_msg += "try to increase '--level' value to perform more tests." 
         print(settings.print_critical_msg(err_msg))
         raise SystemExit()
     elif menu.options.shellshock:
@@ -134,7 +134,9 @@ def do_GET_check(url, http_request_method):
                 all_params[param] = all_params[param] + settings.INJECT_TAG
             else:
               all_params[param] = all_params[param].replace(value, value + settings.INJECT_TAG)
-            all_params[param - 1] = all_params[param - 1].replace(value, "").replace(settings.INJECT_TAG, "")
+            # all_params[param - 1] = all_params[param - 1].replace(value, "").replace(settings.INJECT_TAG, "")
+            # all_params[param - 1] = all_params[param - 1].replace(settings.INJECT_TAG, "")
+            all_params[param - 1] = all_params[param - 1].replace(settings.INJECT_TAG, "")
             parameter = settings.PARAMETER_DELIMITER.join(all_params)
             # Reconstruct the URL
             url = url_part + "?" + parameter
@@ -156,7 +158,7 @@ def do_GET_check(url, http_request_method):
 Define the vulnerable GET parameter.
 """
 def vuln_GET_param(url):
-  urls_list = []
+
   # Define the vulnerable parameter
   if "?" not in url:
     # Grab the value of parameter.
@@ -170,6 +172,9 @@ def vuln_GET_param(url):
     for param in range(0,len(pairs)):
       if settings.INJECT_TAG in pairs[param]:
         vuln_parameter = pairs[param].split("=")[0]
+        settings.TESTABLE_VALUE = pairs[param].split("=")[1].replace(settings.INJECT_TAG,"")
+        if settings.BASE64_PADDING  in pairs[param]:
+          settings.TESTABLE_VALUE = settings.TESTABLE_VALUE + settings.BASE64_PADDING  
         break
 
   else:
@@ -312,7 +317,9 @@ def do_POST_check(parameter, http_request_method):
               all_params[param] = all_params[param] + settings.INJECT_TAG
         else:
           all_params[param] = all_params[param].replace(value, value + settings.INJECT_TAG)
-        all_params[param - 1] = all_params[param - 1].replace(value, "").replace(settings.INJECT_TAG, "")
+        #all_params[param - 1] = all_params[param - 1].replace(value, "").replace(settings.INJECT_TAG, "")
+        # all_params[param - 1] = all_params[param - 1].replace(settings.INJECT_TAG, "")
+        all_params[param - 1] = all_params[param - 1].replace(settings.INJECT_TAG, "")
         parameter = settings.PARAMETER_DELIMITER.join(all_params)
         parameter = parameter.replace(settings.RANDOM_TAG,"")
         if type(parameter) != list:
@@ -339,7 +346,8 @@ def do_POST_check(parameter, http_request_method):
 Define the vulnerable POST parameter.
 """
 def vuln_POST_param(parameter, url):
-
+  if isinstance(parameter, list):
+    parameter = " ".join(parameter)
   # JSON data format
   if settings.IS_JSON:
     param = re.sub(settings.IGNORE_SPECIAL_CHAR_REGEX, '', parameter.split(settings.INJECT_TAG)[0])
@@ -348,6 +356,7 @@ def vuln_POST_param(parameter, url):
         param = param.split("(")[1]
       vuln_parameter = param.split(",")[-1:]
       if ":" in vuln_parameter[0]:
+        settings.TESTABLE_VALUE = vuln_parameter[0].split(":")[1]
         vuln_parameter = vuln_parameter[0].split(":")[0]
       vuln_parameter = ''.join(vuln_parameter)
 
@@ -356,6 +365,7 @@ def vuln_POST_param(parameter, url):
     if re.findall(r"" + settings.INJECT_TAG + "([^>]+)", parameter):
       vuln_parameter = re.findall(r"" + settings.INJECT_TAG + "([^>]+)", parameter)
       vuln_parameter = re.findall(r"" + "([^</]+)", vuln_parameter[0])
+      settings.TESTABLE_VALUE = re.findall(r"" + "([^>]+)" + settings.INJECT_TAG, parameter)[0]
       vuln_parameter = ''.join(vuln_parameter)
   
   # Regular POST data format.
@@ -366,6 +376,9 @@ def vuln_POST_param(parameter, url):
       for param in range(0,len(pairs)):
         if settings.INJECT_TAG in pairs[param]:
           vuln_parameter = pairs[param].split("=")[0]
+          settings.TESTABLE_VALUE = pairs[param].split("=")[1].replace(settings.INJECT_TAG,"")
+          if settings.BASE64_PADDING  in pairs[param]:
+            settings.TESTABLE_VALUE = settings.TESTABLE_VALUE + settings.BASE64_PADDING  
           break
 
   if 'vuln_parameter' not in locals():
@@ -377,11 +390,23 @@ def vuln_POST_param(parameter, url):
 Define the injection prefixes.
 """
 def prefixes(payload, prefix):
+  if settings.COOKIE_INJECTION == True:
+    specify_cookie_parameter(menu.options.cookie)
+  elif settings.USER_AGENT_INJECTION == True:
+    specify_user_agent_parameter(menu.options.agent)
+  elif settings.REFERER_INJECTION == True:
+    specify_referer_parameter(menu.options.referer)
+  elif settings.HOST_INJECTION == True:
+    specify_host_parameter(menu.options.host)
+
   # Check if defined "--prefix" option.
+  testable_value = settings.TESTABLE_VALUE
+  if settings.WILDCARD_CHAR_APPLIED:
+    testable_value = ""
   if menu.options.prefix:
-    payload = menu.options.prefix + prefix + payload
+    payload = testable_value + menu.options.prefix + prefix + payload
   else:
-    payload = prefix + payload 
+    payload = testable_value + prefix + payload 
 
   return payload
 
@@ -390,17 +415,21 @@ Define the injection suffixes.
 """
 def suffixes(payload, suffix):
   # Check if defined "--suffix" option.
+  if settings.COOKIE_INJECTION and suffix == settings.COOKIE_DELIMITER:
+    suffix = ""
   if menu.options.suffix:
     payload = payload + suffix + menu.options.suffix
   else:
     payload = payload + suffix
-
+    
   return payload
 
 """
 The cookie based injection.
 """
 def do_cookie_check(cookie):
+  # Do replacement with the 'INJECT_HERE' tag, if the wild card char is provided.
+  cookie = checks.wildcard_character(cookie)
   multi_parameters = cookie.split(settings.COOKIE_DELIMITER)
   # Check for inappropriate format in provided parameter(s).
   if len([s for s in multi_parameters if "=" in s]) != (len(multi_parameters)):
@@ -459,7 +488,9 @@ def do_cookie_check(cookie):
             all_params[param] = all_params[param] + settings.INJECT_TAG
         else:
           all_params[param] = all_params[param].replace(value, value + settings.INJECT_TAG)  
-        all_params[param - 1] = all_params[param - 1].replace(value, "").replace(settings.INJECT_TAG, "")
+        #all_params[param - 1] = all_params[param - 1].replace(value, "").replace(settings.INJECT_TAG, "")
+        # all_params[param - 1] = all_params[param - 1].replace(settings.INJECT_TAG, "")
+        all_params[param - 1] = all_params[param - 1].replace(settings.INJECT_TAG, "")
         cookie = settings.COOKIE_DELIMITER.join(all_params)
         if type(cookie) != list:
           cookies_list.append(cookie)
@@ -479,7 +510,6 @@ Specify the cookie parameter(s).
 """
 def specify_cookie_parameter(cookie):
 
-  cookie = checks.wildcard_character(cookie)
   # Specify the vulnerable cookie parameter
   if re.search(r"" + settings.COOKIE_DELIMITER + "(.*)=[\S*(\\/)]*" + settings.INJECT_TAG, cookie) or \
      re.search(r"(.*)=[\S*(\\/)]*" + settings.INJECT_TAG , cookie):
@@ -487,6 +517,7 @@ def specify_cookie_parameter(cookie):
     for param in range(0,len(pairs)):
       if settings.INJECT_TAG in pairs[param]:
         inject_cookie = pairs[param].split("=")[0]
+        settings.TESTABLE_VALUE = pairs[param].split("=")[1].replace(settings.INJECT_TAG,"")
         break
 
   else:
@@ -498,8 +529,7 @@ def specify_cookie_parameter(cookie):
 The user-agent based injection.
 """
 def specify_user_agent_parameter(user_agent):
-  # Specify the vulnerable user-agent HTTP header
-  # Nothing to specify here! :)
+  settings.TESTABLE_VALUE = user_agent.replace(settings.INJECT_TAG,"")
 
   return user_agent
  
@@ -507,8 +537,7 @@ def specify_user_agent_parameter(user_agent):
 The referer based injection.
 """
 def specify_referer_parameter(referer):
-  # Specify the vulnerable referer HTTP header.
-  # Nothing to specify here! :)
+  settings.TESTABLE_VALUE = referer.replace(settings.INJECT_TAG,"")
 
   return referer
 
@@ -516,8 +545,7 @@ def specify_referer_parameter(referer):
 The host based injection.
 """
 def specify_host_parameter(host):
-  # Specify the vulnerable host HTTP header.
-  # Nothing to specify here! :)
+  settings.TESTABLE_VALUE = host.replace(settings.INJECT_TAG,"")
 
   return host
 
@@ -525,8 +553,7 @@ def specify_host_parameter(host):
 The Custom http header based injection.
 """
 def specify_custom_header_parameter(header_name):
-  # Specify the vulnerable HTTP header name.
-  # Nothing to specify here! :)
+  header_name = settings.CUSTOM_HEADER_NAME
 
   return header_name
 

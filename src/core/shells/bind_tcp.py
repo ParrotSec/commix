@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@ import time
 import base64
 import subprocess
 from src.utils import menu
+from src.utils import common
 from src.utils import settings
 from src.thirdparty.six.moves import input as _input
 from src.thirdparty.colorama import Fore, Back, Style, init
@@ -29,7 +30,7 @@ Check for available shell options.
 """
 def shell_options(option):
   if option.lower() == "bind_tcp":
-    warn_msg = "You are already into the '" + option.lower() + "' mode."
+    warn_msg = "You are into the '" + option.lower() + "' mode."
     print(settings.print_warning_msg(warn_msg))
   elif option.lower() == "?": 
     menu.reverse_tcp_options()
@@ -79,25 +80,19 @@ Set up the PHP working directory on the target host.
 """
 def set_php_working_dir():
   while True:
-    if not menu.options.batch:
-      question_msg = "Do you want to use '" + settings.WIN_PHP_DIR 
-      question_msg += "' as PHP working directory on the target host? [Y/n] > "
-      php_dir = _input(settings.print_question_msg(question_msg))
-    else:
-      php_dir = ""
-    if len(php_dir) == 0:
-       php_dir = "Y"
+    message = "Do you want to use '" + settings.WIN_PHP_DIR 
+    message += "' as PHP working directory on the target host? [Y/n] > "
+    php_dir = common.read_input(message, default="Y", check_batch=True)
     if php_dir in settings.CHOICE_YES:
       break
     elif php_dir in settings.CHOICE_NO:
-      question_msg = "Please provide a full path directory for Python interpreter (e.g. '" 
-      question_msg += settings.WIN_PYTHON_INTERPRETER + "') or 'python'> "
-      settings.WIN_PHP_DIR = _input(settings.print_question_msg(question_msg))
+      message = "Please provide a full path directory for Python interpreter (e.g. '" 
+      message += settings.WIN_PYTHON_INTERPRETER + "') or 'python'> "
+      settings.WIN_PHP_DIR = common.read_input(message, default=None, check_batch=True)
       settings.USER_DEFINED_PHP_DIR = True
       break
     else:
-      err_msg = "'" + php_dir + "' is not a valid answer."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(php_dir)  
       pass
 
 """
@@ -105,25 +100,19 @@ Set up the Python working directory on the target host.
 """
 def set_python_working_dir():
   while True:
-    if not menu.options.batch:
-      question_msg = "Do you want to use '" + settings.WIN_PYTHON_INTERPRETER 
-      question_msg += "' as Python interpreter on the target host? [Y/n] > "
-      python_dir = _input(settings.print_question_msg(question_msg))
-    else:
-      python_dir = "" 
-    if len(python_dir) == 0:
-       python_dir = "Y"
+    message = "Do you want to use '" + settings.WIN_PYTHON_INTERPRETER 
+    message += "' as Python interpreter on the target host? [Y/n] > "
+    python_dir = common.read_input(message, default="Y", check_batch=True)
     if python_dir in settings.CHOICE_YES:
       break
     elif python_dir in settings.CHOICE_NO:
-      question_msg = "Please provide a full path directory for Python interpreter (e.g. '" 
-      question_msg += "C:\\Python27\\python.exe') > "
-      settings.WIN_PYTHON_INTERPRETER = _input(settings.print_question_msg(question_msg))
+      message = "Please provide a full path directory for Python interpreter (e.g. '" 
+      message += "C:\\Python27\\python.exe') > "
+      settings.WIN_PYTHON_INTERPRETER = common.read_input(message, default=None, check_batch=True)
       settings.USER_DEFINED_PYTHON_DIR = True
       break
     else:
-      err_msg = "'" + python_dir + "' is not a valid answer."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(python_dir)  
       pass
 
 """
@@ -131,25 +120,19 @@ Set up the Python interpreter on linux target host.
 """
 def set_python_interpreter():
   while True:
-    if not menu.options.batch:
-      question_msg = "Do you want to use '" + settings.LINUX_PYTHON_INTERPRETER
-      question_msg += "' as Python interpreter on the target host? [Y/n] > "
-      python_interpreter = _input(settings.print_question_msg(question_msg))
-    else:
-      python_interpreter = ""
-    if len(python_interpreter) == 0:
-       python_interpreter = "Y"
+    message = "Do you want to use '" + settings.LINUX_PYTHON_INTERPRETER
+    message += "' as Python interpreter on the target host? [Y/n] > "
+    python_interpreter = common.read_input(message, default="Y", check_batch=True)
     if python_interpreter in settings.CHOICE_YES:
       break
     elif python_interpreter in settings.CHOICE_NO:
-      question_msg = "Please provide a custom interpreter for Python (e.g. '" 
-      question_msg += "python27') > "
-      settings.LINUX_PYTHON_INTERPRETER = _input(settings.print_question_msg(question_msg))
+      message = "Please provide a custom interpreter for Python (e.g. '" 
+      message += "python27') > "
+      settings.LINUX_PYTHON_INTERPRETER = common.read_input(message, default=None, check_batch=True)
       settings.USER_DEFINED_PYTHON_INTERPRETER = True
       break
     else:
-      err_msg = "'" + python_interpreter + "' is not a valid answer."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(python_interpreter)  
       pass
 
 """
@@ -192,13 +175,12 @@ def netcat_version(separator):
   ]
 
   while True:
-    nc_version = _input("""
----[ """ + Style.BRIGHT + Fore.BLUE + """Netcat bind TCP shells""" + Style.RESET_ALL + """ ]--- 
-Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use the default Netcat on target host.
-Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use Netcat for Busybox on target host.
-Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use Netcat-Traditional on target host. 
-Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use Netcat-Openbsd on target host. 
-\ncommix(""" + Style.BRIGHT + Fore.RED + """bind_tcp_netcat""" + Style.RESET_ALL + """) > """)
+    nc_version = _input("""""" + Style.BRIGHT + """Available netcat bind TCP shell options:""" + Style.RESET_ALL + """ 
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use the default Netcat on target host.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use Netcat for Busybox on target host.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use Netcat-Traditional on target host. 
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use Netcat-Openbsd on target host. 
+commix(""" + Style.BRIGHT + Fore.RED + """bind_tcp_netcat""" + Style.RESET_ALL + """) > """)
     
     # Default Netcat
     if nc_version == '1':
@@ -222,18 +204,12 @@ Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use Netcat-Openbs
         return shell_options(nc_version)
     # Invalid command    
     else:
-      err_msg = "The '" + nc_version + "' option, is not valid."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(nc_version)
       continue
 
   while True:
-    if not menu.options.batch:
-      question_msg = "Do you want to use '/bin' standard subdirectory? [y/N] > "
-      enable_bin_dir = _input(settings.print_question_msg(question_msg))
-    else:
-      enable_bin_dir = ""
-    if len(enable_bin_dir) == 0:
-       enable_bin_dir = "n"              
+    message = "Do you want to use '/bin' standard subdirectory? [y/N] > "
+    enable_bin_dir = common.read_input(message, default="N", check_batch=True)             
     if enable_bin_dir in settings.CHOICE_NO:
       break  
     elif enable_bin_dir in settings.CHOICE_YES :
@@ -243,8 +219,7 @@ Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use Netcat-Openbs
     elif enable_bin_dir in settings.CHOICE_QUIT:
       raise SystemExit()
     else:
-      err_msg = "'" + enable_bin_dir + "' is not a valid answer."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(enable_bin_dir)  
       pass
 
   if nc_version != '4':
@@ -263,18 +238,17 @@ Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use Netcat-Openbs
 def other_bind_shells(separator):
 
   while True:
-    other_shell = _input("""
----[ """ + Style.BRIGHT + Fore.BLUE + """Generic bind TCP shells""" + Style.RESET_ALL + """ ]---
-Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use a PHP bind TCP shell.
-Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use a Perl bind TCP shell.
-Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use a Ruby bind TCP shell. 
-Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use a Python bind TCP shell.
-Type '""" + Style.BRIGHT + """5""" + Style.RESET_ALL + """' to use a Socat bind TCP shell.
-Type '""" + Style.BRIGHT + """6""" + Style.RESET_ALL + """' to use a Ncat bind TCP shell.
-\n---[ """ + Style.BRIGHT + Fore.BLUE  + """Meterpreter bind TCP shells""" + Style.RESET_ALL + """ ]---
-Type '""" + Style.BRIGHT + """7""" + Style.RESET_ALL + """' to use a PHP meterpreter bind TCP shell.
-Type '""" + Style.BRIGHT + """8""" + Style.RESET_ALL + """' to use a Python meterpreter bind TCP shell. 
-\ncommix(""" + Style.BRIGHT + Fore.RED + """bind_tcp_other""" + Style.RESET_ALL + """) > """)
+    other_shell = _input("""""" + Style.BRIGHT + """Available generic bind TCP shell options:""" + Style.RESET_ALL + """
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use a PHP bind TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use a Perl bind TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use a Ruby bind TCP shell. 
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use a Python bind TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """5""" + Style.RESET_ALL + """' to use a Socat bind TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """6""" + Style.RESET_ALL + """' to use a Ncat bind TCP shell.
+""" + Style.BRIGHT + """Available meterpreter bind TCP shell options:""" + Style.RESET_ALL + """
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """7""" + Style.RESET_ALL + """' to use a PHP meterpreter bind TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """8""" + Style.RESET_ALL + """' to use a Python meterpreter bind TCP shell. 
+commix(""" + Style.BRIGHT + Fore.RED + """bind_tcp_other""" + Style.RESET_ALL + """) > """)
     
     # PHP-bind-shell
     if other_shell == '1':
@@ -434,7 +408,7 @@ Type '""" + Style.BRIGHT + """8""" + Style.RESET_ALL + """' to use a Python mete
         with open (output, "r") as content_file:
           data = content_file.readlines()
           data = ''.join(data)
-          #data = base64.b64encode(data.encode(settings.UNICODE_ENCODING)).decode()
+          #data = base64.b64encode(data.encode(settings.DEFAULT_CODEC)).decode()
 
         print(settings.SINGLE_WHITESPACE)
         # Remove the ouput file.
@@ -464,8 +438,7 @@ Type '""" + Style.BRIGHT + """8""" + Style.RESET_ALL + """' to use a Python mete
         return shell_options(other_shell)
     # Invalid option
     else:
-      err_msg = "The '" + other_shell + "' option, is not valid."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(other_shell)
       continue
 
   return other_shell
@@ -476,14 +449,13 @@ Choose type of bind TCP connection.
 def bind_tcp_options(separator):
 
   while True:
-    bind_tcp_option = _input("""   
----[ """ + Style.BRIGHT + Fore.BLUE + """Bind TCP shells""" + Style.RESET_ALL + """ ]---     
-Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' for netcat bind TCP shells.
-Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' for other bind TCP shells.
-\ncommix(""" + Style.BRIGHT + Fore.RED + """bind_tcp""" + Style.RESET_ALL + """) > """)
+    bind_tcp_option = _input("""""" + Style.BRIGHT + """Available bind TCP shell options:""" + Style.RESET_ALL + """  
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' for netcat bind TCP shells.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' for other bind TCP shells.
+commix(""" + Style.BRIGHT + Fore.RED + """bind_tcp""" + Style.RESET_ALL + """) > """)
 
     if bind_tcp_option.lower() == "bind_tcp": 
-      warn_msg = "You are already into the '" + bind_tcp_option.lower() + "' mode."
+      warn_msg = "You are into the '" + bind_tcp_option.lower() + "' mode."
       print(settings.print_warning_msg(warn_msg))
       continue
 
@@ -509,8 +481,7 @@ Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' for other bind TCP s
         return shell_options(bind_tcp_option)
     # Invalid option
     else:
-      err_msg = "The '" + bind_tcp_option + "' option, is not valid."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(bind_tcp_option)
       continue
 
 
@@ -520,12 +491,12 @@ Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' for other bind TCP s
 Set up the bind TCP connection
 """
 def configure_bind_tcp(separator):
-
   # Set up rhost for the bind TCP connection
   while True:
-    option = _input("""commix(""" + Style.BRIGHT + Fore.RED + """bind_tcp""" + Style.RESET_ALL + """) > """)
+    sys.stdout.write(settings.BIND_TCP_SHELL)
+    option = _input()
     if option.lower() == "bind_tcp": 
-      warn_msg = "You are already into the '" + option.lower() + "' mode."
+      warn_msg = "You are into the '" + option.lower() + "' mode."
       print(settings.print_warning_msg(warn_msg))
       continue
     elif option.lower() == "?": 
@@ -565,12 +536,10 @@ def configure_bind_tcp(separator):
         else:
           continue
       else:
-        err_msg = "The '" + option + "' option, is not valid."
-        print(settings.print_error_msg(err_msg))
+        common.invalid_option(option)
         pass
     else:
-      err_msg = "The '" + option + "' option, is not valid."
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(option)
       pass
 
 # eof

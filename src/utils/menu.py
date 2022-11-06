@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@ import sys
 from src.utils import settings
 from optparse import OptionGroup
 from optparse import OptionParser
+from optparse import SUPPRESS_HELP as SUPPRESS
 from src.thirdparty.six.moves import input as _input
 from src.thirdparty.colorama import Fore, Back, Style, init
 
@@ -53,7 +54,7 @@ general = OptionGroup(parser, Style.BRIGHT + Style.UNDERLINE + "General" + Style
                         "These options relate to general matters. ")
 
 general.add_option("-v",
-                default="0",
+                default=0,
                 action="store",
                 type="int",
                 dest="verbose",
@@ -63,7 +64,7 @@ general.add_option("--install",
                 action="store_true",
                 dest="install",
                 default=False,
-                help="Install 'commix' to your system.")
+                help="Install " + settings.APPLICATION + " to your system.")
 
 general.add_option("--version",
                 action="store_true",
@@ -114,11 +115,11 @@ general.add_option("--skip-heuristics",
                 default=False,
                 help="Skip heuristic detection for code injection.")
 
-general.add_option("--encoding",
+general.add_option("--codec",
                 action="store",
-                dest="encoding",
+                dest="codec",
                 default=None,
-                help="Force character encoding used for data retrieval (e.g. GBK).")
+                help="Force codec for character encoding (e.g. 'ascii').")
 
 general.add_option("--charset",
                 action="store",
@@ -130,6 +131,10 @@ general.add_option("--check-internet",
                 action="store_true",
                 dest="check_internet",
                 help="Check internet connection before assessing the target.")
+
+general.add_option("--answers", 
+                dest="answers",
+                help="Set predefined answers (e.g. \"quit=N,follow=N\")")
 
 # Target options
 target = OptionGroup(parser, Style.BRIGHT + Style.UNDERLINE + "Target" + Style.RESET_ALL, 
@@ -162,7 +167,7 @@ target.add_option("--crawl",
                 default=0,
                 dest="crawldepth",
                 type="int",
-                help="Crawl the website starting from the target URL (1-2, Default: 0).")
+                help="Crawl the website starting from the target URL (Default: 1).")
 
 target.add_option("-x",
                 dest="sitemap_url",
@@ -295,16 +300,22 @@ request.add_option("--ignore-redirects",
 request.add_option("--timeout",
                 action="store",
                 dest="timeout",
-                default=False,
+                default=settings.TIMEOUT,
                 type="int",
-                help="Seconds to wait before timeout connection (default 30).")
+                help="Seconds to wait before timeout connection (Default: " + str(settings.TIMEOUT) + ").")
 
 request.add_option("--retries",
                 action="store",
                 dest="retries",
-                default=False,
+                default=settings.MAX_RETRIES,
                 type="int",
-                help="Retries when the connection timeouts (Default: 3).")
+                help="Retries when the connection timeouts (Default: " + str(settings.MAX_RETRIES) + ").")
+
+request.add_option("--drop-set-cookie",
+                action="store_true",
+                dest="drop_set_cookie",
+                default=False,
+                help="Ignore Set-Cookie header from response.")
 
 # Enumeration options
 enumeration = OptionGroup(parser, Style.BRIGHT + Style.UNDERLINE + "Enumeration" + Style.RESET_ALL, 
@@ -397,17 +408,6 @@ file_access.add_option("--file-dest",
 # Modules options
 modules = OptionGroup(parser, Style.BRIGHT + Style.UNDERLINE + "Modules" + Style.RESET_ALL, 
                         "These options can be used increase the detection and/or injection capabilities.")
-modules.add_option("--icmp-exfil", 
-                action="store",
-                dest="ip_icmp_data",
-                default=False,
-                help="The 'ICMP exfiltration' injection module.           (e.g. 'ip_src=192.168.178.1,ip_dst=192.168.178.3').")
-
-modules.add_option("--dns-server", 
-                action="store",
-                dest="dns_server",
-                default=False,
-                help="The 'DNS exfiltration' injection module.        (Domain name used for DNS exfiltration attack).")
 
 modules.add_option("--shellshock", 
                 action="store_true",
@@ -468,7 +468,7 @@ injection.add_option("--time-sec",
                 action="store",
                 type="int",
                 dest="timesec",
-                help="Seconds to delay the OS response (Default 1).")
+                help="Seconds to delay the OS response (Default: 1).")
 
 injection.add_option("--tmp-path", 
                 action="store",
@@ -554,7 +554,13 @@ misc.add_option("--list-tampers",
                 action="store_true",
                 dest="list_tampers",
                 default=False,
-                help="Display list of available tamper scripts")
+                help="Display list of available tamper scripts.")
+
+misc.add_option("--no-logging", 
+                action="store_true",
+                dest="no_logging",
+                default=False,
+                help="Disable logging to a file.")
 
 misc.add_option("--purge", 
                 action="store_true",
@@ -578,7 +584,7 @@ misc.add_option("--offline",
                 action="store_true",
                 dest="offline",
                 default=False,
-                help="Work in offline mode.")
+                help="Work in offline mode.\n")
 
 misc.add_option("--wizard", 
                 action="store_true",
@@ -591,6 +597,12 @@ misc.add_option("--disable-coloring",
                 dest="disable_coloring",
                 default=False,
                 help="Disable console output coloring.")
+
+ # Hidden options
+parser.add_option("--smoke-test",
+                    action="store_true",
+                    dest="smoke_test",
+                    help=SUPPRESS)
 
 parser.add_option_group(general)
 parser.add_option_group(target)
@@ -630,76 +642,53 @@ settings.sys_argv_errors()
 The "os_shell" available options.
 """
 def os_shell_options():
-      print("""
----[ """ + Style.BRIGHT + Fore.BLUE + """Available options""" + Style.RESET_ALL + """ ]---     
-Type '""" + Style.BRIGHT + """?""" + Style.RESET_ALL + """' to get all the available options.
-Type '""" + Style.BRIGHT + """back""" + Style.RESET_ALL + """' to move back from the current context.
-Type '""" + Style.BRIGHT + """quit""" + Style.RESET_ALL + """' (or use <Ctrl-C>) to quit commix.
-Type '""" + Style.BRIGHT + """reverse_tcp""" + Style.RESET_ALL + """' to get a reverse TCP connection.
-Type '""" + Style.BRIGHT + """bind_tcp""" + Style.RESET_ALL + """' to set a bind TCP connection.
-""")
+    print("""""" + Style.BRIGHT + """Available 'os_shell' options:""" + Style.RESET_ALL + """    
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """?""" + Style.RESET_ALL + """' to get all the available options.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """back""" + Style.RESET_ALL + """' to move back from the current context.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """quit""" + Style.RESET_ALL + """' (or use <Ctrl-C>) to quit commix.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """reverse_tcp""" + Style.RESET_ALL + """' to get a reverse TCP connection.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """bind_tcp""" + Style.RESET_ALL + """' to set a bind TCP connection.""")
 
 """
 The "reverse_tcp" available options.
 """
 def reverse_tcp_options():
-      print("""
----[ """ + Style.BRIGHT + Fore.BLUE + """Available options""" + Style.RESET_ALL + """ ]---     
-Type '""" + Style.BRIGHT + """?""" + Style.RESET_ALL + """' to get all the available options.
-Type '""" + Style.BRIGHT + """set""" + Style.RESET_ALL + """' to set a context-specific variable to a value.
-Type '""" + Style.BRIGHT + """back""" + Style.RESET_ALL + """' to move back from the current context.
-Type '""" + Style.BRIGHT + """quit""" + Style.RESET_ALL + """' (or use <Ctrl-C>) to quit commix.
-Type '""" + Style.BRIGHT + """os_shell""" + Style.RESET_ALL + """' to get into an operating system command shell.
-Type '""" + Style.BRIGHT + """bind_tcp""" + Style.RESET_ALL + """' to set a bind TCP connection.
-""")
+    print("""""" + Style.BRIGHT + """Available 'reverse_tcp' options:""" + Style.RESET_ALL + """     
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """?""" + Style.RESET_ALL + """' to get all the available options.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """set""" + Style.RESET_ALL + """' to set a context-specific variable to a value.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """back""" + Style.RESET_ALL + """' to move back from the current context.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """quit""" + Style.RESET_ALL + """' (or use <Ctrl-C>) to quit commix.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """os_shell""" + Style.RESET_ALL + """' to get into an operating system command shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """bind_tcp""" + Style.RESET_ALL + """' to set a bind TCP connection.""")
 
 """
 The "bind_tcp" available options.
 """
 def bind_tcp_options():
-      print("""
----[ """ + Style.BRIGHT + Fore.BLUE + """Available options""" + Style.RESET_ALL + """ ]---     
-Type '""" + Style.BRIGHT + """?""" + Style.RESET_ALL + """' to get all the available options.
-Type '""" + Style.BRIGHT + """set""" + Style.RESET_ALL + """' to set a context-specific variable to a value.
-Type '""" + Style.BRIGHT + """back""" + Style.RESET_ALL + """' to move back from the current context.
-Type '""" + Style.BRIGHT + """quit""" + Style.RESET_ALL + """' (or use <Ctrl-C>) to quit commix.
-Type '""" + Style.BRIGHT + """os_shell""" + Style.RESET_ALL + """' to get into an operating system command shell.
-Type '""" + Style.BRIGHT + """reverse_tcp""" + Style.RESET_ALL + """' to get a reverse TCP connection.
-""")
+    print("""""" + Style.BRIGHT + """Available 'bind_tcp' options:""" + Style.RESET_ALL + """     
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """?""" + Style.RESET_ALL + """' to get all the available options.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """set""" + Style.RESET_ALL + """' to set a context-specific variable to a value.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """back""" + Style.RESET_ALL + """' to move back from the current context.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """quit""" + Style.RESET_ALL + """' (or use <Ctrl-C>) to quit commix.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """os_shell""" + Style.RESET_ALL + """' to get into an operating system command shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """reverse_tcp""" + Style.RESET_ALL + """' to get a reverse TCP connection.""")
 
 """
 The available mobile user agents.
 """
 def mobile_user_agents():
-    print("""---[ """ + Style.BRIGHT + Fore.BLUE + """Available smartphones HTTP User-Agent headers""" + Style.RESET_ALL + """ ]---     
-Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' for BlackBerry Z10.
-Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' for Samsung Galaxy S7.
-Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' for HP iPAQ 6365.
-Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' for HTC 10.
-Type '""" + Style.BRIGHT + """5""" + Style.RESET_ALL + """' for Huawei P8.
-Type '""" + Style.BRIGHT + """6""" + Style.RESET_ALL + """' for Apple iPhone 8.
-Type '""" + Style.BRIGHT + """7""" + Style.RESET_ALL + """' for Microsoft Lumia 950.
-Type '""" + Style.BRIGHT + """8""" + Style.RESET_ALL + """' for Google Nexus 7.
-Type '""" + Style.BRIGHT + """9""" + Style.RESET_ALL + """' for Nokia N97.
-Type '""" + Style.BRIGHT + """10""" + Style.RESET_ALL + """' for Google Pixel".
-Type '""" + Style.BRIGHT + """11""" + Style.RESET_ALL + """' for Xiaomi Mi 3.""")
-
-    while True:
-      question_msg = "Which smartphone do you want to imitate through HTTP User-Agent header? "
-      mobile_user_agent = _input(settings.print_question_msg(question_msg))
-      try:
-        if int(mobile_user_agent) in range(0,len(settings.MOBILE_USER_AGENT_LIST)):
-          return settings.MOBILE_USER_AGENT_LIST[int(mobile_user_agent)]
-        elif mobile_user_agent.lower() == "q":
-          raise SystemExit()
-        else:
-          err_msg = "'" + mobile_user_agent + "' is not a valid answer."  
-          print(settings.print_error_msg(err_msg))
-          pass
-      except ValueError:
-        err_msg = "'" + mobile_user_agent + "' is not a valid answer."  
-        print(settings.print_error_msg(err_msg))
-        pass     
+    print("""""" + Style.BRIGHT + """Available smartphones HTTP User-Agent headers:""" + Style.RESET_ALL + """     
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' for BlackBerry Z10.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' for Samsung Galaxy S7.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' for HP iPAQ 6365.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' for HTC 10.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """5""" + Style.RESET_ALL + """' for Huawei P8.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """6""" + Style.RESET_ALL + """' for Apple iPhone 8.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """7""" + Style.RESET_ALL + """' for Microsoft Lumia 950.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """8""" + Style.RESET_ALL + """' for Google Nexus 7.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """9""" + Style.RESET_ALL + """' for Nokia N97.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """10""" + Style.RESET_ALL + """' for Google Pixel".
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """11""" + Style.RESET_ALL + """' for Xiaomi Mi 3.""")
 
 """
 The tab compliter (shell options).
@@ -717,24 +706,14 @@ def tab_completer(text, state):
 Check if enumeration options are enabled.
 """
 def enumeration_options():
-  if options.hostname or \
-     options.current_user or \
-     options.is_root or \
-     options.is_admin or \
-     options.sys_info or \
-     options.users or \
-     options.privileges or \
-     options.passwords or \
-     options.ps_version :
+  if any((options.hostname, options.current_user, options.is_root, options.is_admin, options.sys_info, options.users, options.privileges, options.passwords, options.ps_version)):
     return True
 
 """
 Check if file access options are enabled.
 """
 def file_access_options():
-  if options.file_write or \
-     options.file_upload or\
-     options.file_read:
+  if any((options.file_write, options.file_upload, options.file_read)):
     return True
 
 # eof

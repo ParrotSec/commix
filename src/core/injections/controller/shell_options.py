@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -165,7 +165,7 @@ def check_option(separator, TAG, cmd, prefix, suffix, whitespace, http_request_m
 
   # The "os_shell" option
   elif os_shell_option == "os_shell": 
-    warn_msg = "You are already into the '" + os_shell_option + "' mode."
+    warn_msg = "You are into the '" + os_shell_option + "' mode."
     print(settings.print_warning_msg(warn_msg))
     return go_back, go_back_again
 

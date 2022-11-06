@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -65,7 +65,9 @@ def http_response(headers, code):
       if menu.options.traffic_file:
         logs.log_traffic("\n" + header)
   if menu.options.traffic_file:
-    logs.log_traffic("\n\n")    
+    logs.log_traffic("\n\n")
+  if settings.VERBOSITY_LEVEL == 3:
+    print(settings.SINGLE_WHITESPACE)   
 
 """
 Print HTTP response headers / Body.
@@ -85,13 +87,12 @@ def print_http_response(response_headers, code, page):
     try:
       http_response_content(page)
     except AttributeError:
-      http_response_content(page.decode(settings.UNICODE_ENCODING))
+      http_response_content(page.decode(settings.DEFAULT_CODEC))
 
 """
 Checking the HTTP Headers & HTTP/S Request.
 """
 def check_http_traffic(request):
-  settings.TOTAL_OF_REQUESTS = settings.TOTAL_OF_REQUESTS + 1
   # Delay in seconds between each HTTP request
   time.sleep(int(settings.DELAY))
   if settings.SCHEME == 'https':
@@ -114,94 +115,59 @@ def check_http_traffic(request):
       http_client.send(self, req)
 
   class connection_handler(_urllib.request.HTTPSHandler, _urllib.request.HTTPHandler, object):
+    """
+    Print HTTP request headers.
+    """
+    def print_http_response(self):
+      settings.TOTAL_OF_REQUESTS = settings.TOTAL_OF_REQUESTS + 1
+      if settings.VERBOSITY_LEVEL >= 2 or menu.options.traffic_file:
+        if settings.VERBOSITY_LEVEL >= 2:
+          req_msg = "HTTP request [" + settings.print_request_num(settings.TOTAL_OF_REQUESTS) + "]:"
+          print(settings.print_request_msg(req_msg))
+        if menu.options.traffic_file:
+          req_msg = "HTTP request [#" + str(settings.TOTAL_OF_REQUESTS) + "]:"
+          logs.log_traffic(req_msg)
+
     def http_open(self, req):
       try:
+        self.print_http_response()
         self.do_open(connection, req)
         return super(connection_handler, self).http_open(req)
-      except (_urllib.error.HTTPError, _urllib.error.URLError) as err_msg:
-        try:
-          error_msg = str(err_msg.args[0]).split("] ")[1] + "."
-        except IndexError:
-          error_msg = str(err_msg.args[0]) + "."
-          error_msg = "Connection to the target URL " + error_msg
-      except _http_client.InvalidURL as err_msg:
-        settings.VALID_URL = False
-        error_msg = err_msg 
-      if current_attempt == 0 and settings.VERBOSITY_LEVEL < 2:
-        print(settings.SINGLE_WHITESPACE)
-      print(settings.print_critical_msg(error_msg))
-      if not settings.VALID_URL:
-        raise SystemExit()
-
+      except (SocketError, _urllib.error.HTTPError, _urllib.error.URLError, _http_client.BadStatusLine, _http_client.InvalidURL, Exception) as err_msg:
+        checks.connection_exceptions(err_msg, url=req)
 
     def https_open(self, req):
       try:
+        self.print_http_response()
         self.do_open(connection, req)
         return super(connection_handler, self).https_open(req)
-      except (_urllib.error.HTTPError, _urllib.error.URLError) as err_msg:
-        try:
-          error_msg = str(err_msg.args[0]).split("] ")[1] + "."
-        except IndexError:
-          error_msg = str(err_msg.args[0]) + "."
-          error_msg = "Connection to the target URL " + error_msg
-      except _http_client.InvalidURL as err_msg:
-        settings.VALID_URL = False
-        error_msg = err_msg 
-      if current_attempt == 0 and settings.VERBOSITY_LEVEL < 2:
-        print(settings.SINGLE_WHITESPACE)
-      print(settings.print_critical_msg(error_msg))
-      if not settings.VALID_URL:
-        raise SystemExit()
-        
+      except (SocketError, _urllib.error.HTTPError, _urllib.error.URLError, _http_client.BadStatusLine, _http_client.InvalidURL, Exception) as err_msg:
+        checks.connection_exceptions(err_msg, url=req)
+
   opener = _urllib.request.build_opener(connection_handler())
   if len(settings.HTTP_METHOD) != 0:
     request.get_method = lambda: settings.HTTP_METHOD
 
   _ = False
-  current_attempt = 0
   unauthorized = False
-  while not _ and current_attempt <= settings.MAX_RETRIES and unauthorized is False:
-    if settings.VERBOSITY_LEVEL >= 2 or menu.options.traffic_file:
-      if settings.VERBOSITY_LEVEL >= 2:
-        req_msg = "HTTP request [" + settings.print_request_num(settings.TOTAL_OF_REQUESTS) + "]:"
-        print(settings.print_request_msg(req_msg))
-      if menu.options.traffic_file:
-        req_msg = "HTTP request [#" + str(settings.TOTAL_OF_REQUESTS) + "]:"
-        logs.log_traffic(req_msg)
+  while not _ and settings.TOTAL_OF_REQUESTS <= settings.MAX_RETRIES and unauthorized is False: 
+    if settings.MULTI_TARGETS:
+      if settings.INIT_TEST == True and len(settings.MULTI_ENCODED_PAYLOAD) != 0:
+        settings.MULTI_ENCODED_PAYLOAD = []
+        menu.options.tamper = settings.USER_SUPPLIED_TAMPER
     try:
       response = opener.open(request, timeout=settings.TIMEOUT)
       page = checks.page_encoding(response, action="encode")
       _ = True
-      if settings.VERBOSITY_LEVEL < 2:
-        if current_attempt != 0:
-          info_msg = "Testing connection to the target URL."
-          sys.stdout.write(settings.print_info_msg(info_msg))
-          sys.stdout.flush()
-        if settings.INIT_TEST == True and not settings.UNAUTHORIZED:
+      settings.MAX_RETRIES = settings.TOTAL_OF_REQUESTS * 2
+      if (settings.INIT_TEST == True and not settings.UNAUTHORIZED) or \
+         (settings.INIT_TEST == True and settings.MULTI_TARGETS):
+        if settings.VALID_URL == False:
+          settings.VALID_URL = True
+        if not settings.CHECK_INTERNET:
+          settings.INIT_TEST = False
+        if settings.VERBOSITY_LEVEL < 2:
           print(settings.SINGLE_WHITESPACE)
-          if not settings.CHECK_INTERNET:
-            settings.INIT_TEST = False
-
-    except _urllib.error.HTTPError as err_msg:
-      if settings.UNAUTHORIZED_ERROR in str(err_msg):
-        settings.UNAUTHORIZED = unauthorized = True
-      if [True for err_code in settings.HTTP_ERROR_CODES if err_code in str(err_msg)]:
-        break
-
-    except (_urllib.error.URLError, _http_client.BadStatusLine) as err_msg:
-      if current_attempt == 0:
-        if settings.VERBOSITY_LEVEL < 2 and "has closed the connection" in str(err_msg):
-          print(settings.SINGLE_WHITESPACE)
-        warn_msg = "The provided target URL seems not reachable. "
-        warn_msg += "In case that it is, please try to re-run using "
-        if not menu.options.random_agent:
-            warn_msg += "'--random-agent' switch and/or "
-        warn_msg += "'--proxy' option."
-        print(settings.print_warning_msg(warn_msg))
-        info_msg = settings.APPLICATION.capitalize() + " is going to retry the request(s)."
-        print(settings.print_info_msg(info_msg))
-      current_attempt = current_attempt + 1
-      time.sleep(3)
 
     except ValueError as err:
       if settings.VERBOSITY_LEVEL < 2:
@@ -212,7 +178,25 @@ def check_http_traffic(request):
 
     except AttributeError:
       raise SystemExit() 
+
+    except _urllib.error.HTTPError as err_msg:
+      if settings.TOTAL_OF_REQUESTS == 1 and settings.VERBOSITY_LEVEL < 2:
+        if (settings.CRAWLING and settings.CRAWLED_URLS_NUM != 0 and settings.CRAWLED_SKIPPED_URLS_NUM != 0) or \
+        not settings.CRAWLING:
+          print(settings.SINGLE_WHITESPACE)
+      if settings.UNAUTHORIZED_ERROR in str(err_msg):
+        settings.UNAUTHORIZED = unauthorized = True
+      if [True for err_code in settings.HTTP_ERROR_CODES if err_code in str(err_msg)]:
+        break
       
+    except (SocketError, _urllib.error.URLError, _http_client.BadStatusLine, _http_client.InvalidURL, Exception) as err_msg:
+      if not settings.MULTI_TARGETS and not settings.CRAWLING:
+        pass
+      else:
+        if not settings.INIT_TEST:
+          checks.connection_exceptions(err_msg, url=request)
+        break
+
   try:
     response = _urllib.request.urlopen(request, timeout=settings.TIMEOUT)
     code = response.getcode()
@@ -227,20 +211,23 @@ def check_http_traffic(request):
     # Checks regarding a potential browser verification protection mechanism.
     checks.browser_verification(page)
     # Checks regarding recognition of generic "your ip has been blocked" messages.
-    checks.blocked_ip(page) 
+    checks.blocked_ip(page)
+    # Checks for not declared cookie(s), while server wants to set its own.
+    if menu.options.cookie == None and not menu.options.drop_set_cookie:
+      checks.not_declared_cookies(response)
 
   # This is useful when handling exotic HTTP errors (i.e requests for authentication).
   except _urllib.error.HTTPError as err:
     if settings.VERBOSITY_LEVEL != 0:
       print_http_response(err.info(), err.code, err.read())
 
-    if not settings.PERFORM_CRACKING and \
-       not settings.IS_JSON and \
-       not settings.IS_XML and \
-       not str(err.code) == settings.INTERNAL_SERVER_ERROR and \
-       not str(err.code) == settings.BAD_REQUEST:
+    if (not settings.PERFORM_CRACKING and \
+    not settings.IS_JSON and \
+    not settings.IS_XML and \
+    not str(err.code) == settings.INTERNAL_SERVER_ERROR and \
+    not str(err.code) == settings.BAD_REQUEST and \
+    not settings.CRAWLED_URLS_NUM != 0) and settings.CRAWLED_SKIPPED_URLS_NUM != 0:
       print(settings.SINGLE_WHITESPACE)
-    # error_msg = "Got " + str(err).replace(": "," (")
     # Check for 3xx, 4xx, 5xx HTTP error codes.
     if str(err.code).startswith(('3', '4', '5')):
       if settings.VERBOSITY_LEVEL >= 2:
@@ -256,78 +243,55 @@ def check_http_traffic(request):
       print(settings.print_critical_msg(err_msg + ")."))
       raise SystemExit()
     
-  # The handlers raise this exception when they run into a problem.
-  except (_http_client.HTTPException, _urllib.error.URLError, _http_client.IncompleteRead) as err:
-    if any(_ in str(err) for _ in ("timed out", "IncompleteRead", "Interrupted system call")):
-      pass
-    else:  
-      err_msg = "Unable to connect to the target URL"
-      try:
-        err_msg += " (Reason: " + str(err.args[0]).split("] ")[-1].lower() + ")."
-      except IndexError:
-        err_msg += "."
-      if menu.options.bulkfile:
-        raise
-      else:  
-        print(settings.print_critical_msg(err_msg))
-        raise SystemExit()
-
-  # Raise exception regarding existing connection was forcibly closed by the remote host.
-  except SocketError as err:
-    if err.errno == errno.ECONNRESET:
-      error_msg = "Connection reset by peer."
-      print(settings.print_critical_msg(error_msg))
-    elif err.errno == errno.ECONNREFUSED:
-      error_msg = "Connection refused."
-      print(settings.print_critical_msg(error_msg))
-    raise SystemExit()
-    
 """
 Check for added headers.
 """
 def do_check(request):
 
-  # Check if defined any Host HTTP header.
-  if menu.options.host and settings.HOST_INJECTION == None:
-    request.add_header(settings.HOST, menu.options.host)
+  # Check if defined any Cookie HTTP header.
+  if menu.options.cookie and settings.COOKIE_INJECTION == None:
+    request.add_header(settings.COOKIE, menu.options.cookie)
 
   # Check if defined any User-Agent HTTP header.
-  if menu.options.agent:
+  if menu.options.agent and settings.USER_AGENT_INJECTION == None:
     request.add_header(settings.USER_AGENT, menu.options.agent)
 
   # Check if defined any Referer HTTP header.
   if menu.options.referer and settings.REFERER_INJECTION == None:
     request.add_header(settings.REFERER, menu.options.referer)
-   
-  # Check if defined any Cookie HTTP header.
-  if menu.options.cookie and settings.COOKIE_INJECTION == False:
-    request.add_header(settings.COOKIE, menu.options.cookie)
-  
-  if not checks.get_header(request.headers, settings.HTTP_ACCEPT_HEADER):
-    request.add_header(settings.HTTP_ACCEPT_HEADER, settings.HTTP_ACCEPT_HEADER_VALUE)
+     
+  # Check if defined any Host HTTP header.
+  if menu.options.host and settings.HOST_INJECTION == None:
+    request.add_header(settings.HOST, menu.options.host)
+
+  if not checks.get_header(request.headers, settings.ACCEPT):
+    request.add_header(settings.ACCEPT, settings.ACCEPT_VALUE)
 
   # The MIME media type for JSON.
-  if menu.options.data:
+  if menu.options.data and not (menu.options.requestfile or menu.options.logfile):
     if re.search(settings.JSON_RECOGNITION_REGEX, menu.options.data) or \
        re.search(settings.JSON_LIKE_RECOGNITION_REGEX, menu.options.data):
-      request.add_header("Content-Type", "application/json")
+      request.add_header(settings.CONTENT_TYPE, settings.HTTP_CONTENT_TYPE_JSON_HEADER_VALUE)
+    elif re.search(settings.XML_RECOGNITION_REGEX, menu.options.data):
+      request.add_header(settings.CONTENT_TYPE, settings.HTTP_CONTENT_TYPE_XML_HEADER_VALUE)
+
+  # Default value for "Accept-Encoding" HTTP header
+  if not (menu.options.requestfile or menu.options.logfile):
+    request.add_header('Accept-Encoding', settings.HTTP_ACCEPT_ENCODING_HEADER_VALUE)
 
   # Appends a fake HTTP header 'X-Forwarded-For'
   if settings.TAMPER_SCRIPTS["xforwardedfor"]:
     from src.core.tamper import xforwardedfor
     xforwardedfor.tamper(request)
   
-  # Default value for "Accept-Encoding" HTTP header
-  request.add_header('Accept-Encoding', settings.HTTP_ACCEPT_ENCODING_HEADER_VALUE)
-
   # Check if defined any HTTP Authentication credentials.
   # HTTP Authentication: Basic / Digest Access Authentication.
   if menu.options.auth_cred and menu.options.auth_type:
     try:
       settings.SUPPORTED_HTTP_AUTH_TYPES.index(menu.options.auth_type)
       if menu.options.auth_type == "basic":
-        b64_string = encodebytes(menu.options.auth_cred.encode(settings.UNICODE_ENCODING)).decode().replace('\n', '')
-        request.add_header("Authorization", "Basic " + b64_string + "")
+        b64_string = encodebytes(menu.options.auth_cred.encode(settings.DEFAULT_CODEC)).decode().replace('\n', '')
+        request.add_header(settings.AUTHORIZATION, "Basic " + b64_string + "")
       elif menu.options.auth_type == "digest":
         try:
           url = menu.options.url
@@ -371,6 +335,7 @@ def do_check(request):
       extra_headers = menu.options.header
   
     extra_headers = extra_headers.replace(":",": ")
+
     if ": //" in extra_headers:
       extra_headers = extra_headers.replace(": //" ,"://")
 
@@ -385,7 +350,18 @@ def do_check(request):
 
     # Remove empty strings
     extra_headers = [x for x in extra_headers if x]
-    
+    if menu.options.data:
+      # The MIME media type for JSON.
+      if re.search(settings.JSON_RECOGNITION_REGEX, menu.options.data) or \
+         re.search(settings.JSON_LIKE_RECOGNITION_REGEX, menu.options.data):
+         if settings.CONTENT_TYPE not in str(extra_headers):
+          request.add_header(settings.CONTENT_TYPE, settings.HTTP_CONTENT_TYPE_JSON_HEADER_VALUE)
+      elif re.search(settings.XML_RECOGNITION_REGEX, menu.options.data):
+         if settings.CONTENT_TYPE not in str(extra_headers):
+          request.add_header(settings.CONTENT_TYPE, settings.HTTP_CONTENT_TYPE_XML_HEADER_VALUE)
+    if "Accept-Encoding" not in str(extra_headers):
+      request.add_header('Accept-Encoding', settings.HTTP_ACCEPT_ENCODING_HEADER_VALUE)
+          
     for extra_header in extra_headers:
       try:
         # Extra HTTP Header name 
@@ -395,13 +371,13 @@ def do_check(request):
         http_header_value = extra_header.split(':', 1)[1]
         http_header_value = ''.join(http_header_value).strip().replace(": ",":")
         # Check if it is a custom header injection.
-        if settings.CUSTOM_HEADER_INJECTION == False and \
-           settings.INJECT_TAG in http_header_value:
+        if settings.CUSTOM_HEADER_INJECTION == False and http_header_name in settings.TEST_PARAMETER:
           settings.CUSTOM_HEADER_INJECTION = True
           settings.CUSTOM_HEADER_NAME = http_header_name
+          settings.CUSTOM_HEADER_VALUE = http_header_value
         # Add HTTP Header name / value to the HTTP request
-        if http_header_name not in [settings.HOST, settings.USER_AGENT, settings.REFERER, settings.COOKIE]:
-          request.add_header(http_header_name.encode(settings.UNICODE_ENCODING), http_header_value.encode(settings.UNICODE_ENCODING))
+        if http_header_name not in [settings.HOST, settings.USER_AGENT, settings.REFERER, settings.COOKIE] and settings.CUSTOM_HEADER_INJECTION == False:
+          request.add_header(http_header_name, http_header_value)
       except:
         pass
         

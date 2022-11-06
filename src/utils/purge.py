@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -37,12 +37,13 @@ Safely removes (purges) output directory.
 def purge():
   directory = settings.OUTPUT_DIR
   if not os.path.isdir(directory):
-    warn_msg = "Skipping purging of directory '" + directory + "' as it does not exist."
-    print(settings.print_warning_msg(warn_msg))
+    if settings.VERBOSITY_LEVEL != 0:
+      debug_msg = "Skipping purging of directory '" + directory + "' as it does not exist."
+      print(settings.print_debug_msg(debug_msg))
     return
   info_msg = "Purging content of directory '" + directory + "'"
   if not settings.VERBOSITY_LEVEL != 0: 
-    info_msg += ". "
+    info_msg += "."
   else:
      info_msg += ".\n" 
   sys.stdout.write(settings.print_info_msg(info_msg))

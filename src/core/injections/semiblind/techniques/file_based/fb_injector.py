@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@ from src.core.requests import proxy
 from src.core.requests import headers
 from src.core.requests import requests
 from src.core.requests import parameters
+from src.utils import common
 from src.core.injections.controller import checks
 from src.thirdparty.six.moves import urllib as _urllib
 from src.thirdparty.six.moves import input as _input
@@ -42,8 +43,8 @@ Check if target host is vulnerable.
 """
 def injection_test(payload, http_request_method, url):
                       
-  # Check if defined method is GET (Default).
-  if not menu.options.data:
+  # Check if defined POST data
+  if not settings.USER_DEFINED_POST_DATA:
     
     # Check if its not specified the 'INJECT_HERE' tag
     #url = parameters.do_GET_check(url, http_request_method)
@@ -54,7 +55,7 @@ def injection_test(payload, http_request_method, url):
     # Define the vulnerable parameter
     vuln_parameter = parameters.vuln_GET_param(url)
     
-    target = url.replace(settings.INJECT_TAG, payload)
+    target = url.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload)
     request = _urllib.request.Request(target)
     
     # Check if defined extra headers.
@@ -69,22 +70,22 @@ def injection_test(payload, http_request_method, url):
   # Check if defined method is POST.
   else:
     parameter = menu.options.data
-    parameter = _urllib.parse.unquote(parameter)
+    #parameter = _urllib.parse.unquote(parameter)
     # Check if its not specified the 'INJECT_HERE' tag
     parameter = parameters.do_POST_check(parameter, http_request_method)
     parameter = ''.join(str(e) for e in parameter).replace("+","%2B")
     # Define the POST data    
     if settings.IS_JSON:
-      data = parameter.replace(settings.INJECT_TAG, _urllib.parse.unquote(payload.replace("\"", "\\\"")))
+      data = parameter.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, _urllib.parse.unquote(payload.replace("\"", "\\\"")))
       try:
         data = checks.json_data(data)
       except ValueError:
         pass
     elif settings.IS_XML:
-      data = parameter.replace(settings.INJECT_TAG, _urllib.parse.unquote(payload)) 
+      data = parameter.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, _urllib.parse.unquote(payload)) 
     else:
-      data = parameter.replace(settings.INJECT_TAG, payload)
-    request = _urllib.request.Request(url, data.encode(settings.UNICODE_ENCODING))
+      data = parameter.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload)
+    request = _urllib.request.Request(url, data.encode(settings.DEFAULT_CODEC))
 
     # Check if defined extra headers.
     headers.do_check(request)
@@ -188,12 +189,12 @@ def injection(separator, payload, TAG, cmd, prefix, suffix, whitespace, http_req
       response = custom_header_injection_test(url, vuln_parameter, payload)
 
     else:
-      # Check if defined method is GET (Default).
-      if not menu.options.data:
+      # Check if defined POST data
+      if not settings.USER_DEFINED_POST_DATA:
         # Check if its not specified the 'INJECT_HERE' tag
         #url = parameters.do_GET_check(url, http_request_method)
         payload = payload.replace(" ","%20")
-        target = url.replace(settings.INJECT_TAG, payload)
+        target = url.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload)
         vuln_parameter = ''.join(vuln_parameter)
         request = _urllib.request.Request(target)
         # Check if defined extra headers.
@@ -201,24 +202,27 @@ def injection(separator, payload, TAG, cmd, prefix, suffix, whitespace, http_req
         # Get the response of the request
         response = requests.get_request_response(request) 
 
-      else :
+      else:
         # Check if defined method is POST.
         parameter = menu.options.data
-        parameter = _urllib.parse.unquote(parameter)
+        #parameter = _urllib.parse.unquote(parameter)
         # Check if its not specified the 'INJECT_HERE' tag
         parameter = parameters.do_POST_check(parameter, http_request_method)
+        parameter = ''.join(str(e) for e in parameter).replace("+","%2B")
+        # Define the vulnerable parameter
+        vuln_parameter = parameters.vuln_POST_param(parameter, url)
         # Define the POST data  
         if settings.IS_JSON:
-          data = parameter.replace(settings.INJECT_TAG, _urllib.parse.unquote(payload.replace("\"", "\\\"")))
+          data = parameter.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, _urllib.parse.unquote(payload.replace("\"", "\\\"")))
           try:
             data = checks.json_data(data)
           except ValueError:
             pass
         elif settings.IS_XML:
-          data = parameter.replace(settings.INJECT_TAG, _urllib.parse.unquote(payload)) 
+          data = parameter.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, _urllib.parse.unquote(payload)) 
         else:
-          data = parameter.replace(settings.INJECT_TAG, payload)
-        request = _urllib.request.Request(url, data.encode(settings.UNICODE_ENCODING))
+          data = parameter.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload)
+        request = _urllib.request.Request(url, data.encode(settings.DEFAULT_CODEC))
           
         # Check if defined extra headers.
         headers.do_check(request)        
@@ -262,7 +266,7 @@ def injection_output(url, OUTPUT_TEXTFILE, timesec):
     settings.DEFINED_WEBROOT = output
     return output
 
-  if not settings.DEFINED_WEBROOT:
+  if not settings.DEFINED_WEBROOT or settings.MULTI_TARGETS:
     if menu.options.web_root:
       _ = "/"
       if not menu.options.web_root.endswith(_):
@@ -275,19 +279,22 @@ def injection_output(url, OUTPUT_TEXTFILE, timesec):
         if item == menu.options.web_root:
           settings.DEFINED_WEBROOT = output
           break
-      if not settings.DEFINED_WEBROOT:
+
+      if not settings.DEFINED_WEBROOT or (settings.MULTI_TARGETS and not settings.RECHECK_FILE_FOR_EXTRACTION):
+        if settings.MULTI_TARGETS:
+          settings.RECHECK_FILE_FOR_EXTRACTION = True
         while True:
-          if not menu.options.batch:
-            question_msg =  "Do you want to use URL '" + output
-            question_msg += "' for command execution results extraction? [Y/n] > "
-            procced_option = _input(settings.print_question_msg(question_msg))
-          else:
-            procced_option = ""
-          if procced_option in settings.CHOICE_YES or len(procced_option) == 0:
+          message =  "Do you want to use URL '" + output
+          message += "' as command execution output? [Y/n] > "
+          procced_option = common.read_input(message, default="Y", check_batch=True)
+          if procced_option in settings.CHOICE_YES:
             settings.DEFINED_WEBROOT = output
             break
           elif procced_option in settings.CHOICE_NO:
             output = custom_web_root(url, OUTPUT_TEXTFILE)
+            info_msg = "Using '" + output 
+            info_msg += "' as command execution output."
+            print(settings.print_info_msg(info_msg))
             if not settings.DEFINED_WEBROOT:
               pass
             else:
@@ -295,8 +302,7 @@ def injection_output(url, OUTPUT_TEXTFILE, timesec):
           elif procced_option in settings.CHOICE_QUIT:
             raise SystemExit()
           else:
-            err_msg = "'" + procced_option + "' is not a valid answer."  
-            print(settings.print_error_msg(err_msg))
+            common.invalid_option(procced_option)  
             pass
     else:
         output = custom_web_root(url, OUTPUT_TEXTFILE)
@@ -304,7 +310,7 @@ def injection_output(url, OUTPUT_TEXTFILE, timesec):
     output = settings.DEFINED_WEBROOT
 
   if settings.VERBOSITY_LEVEL != 0:
-    debug_msg = "Checking URL '" + settings.DEFINED_WEBROOT + "' for command execution results extraction."
+    debug_msg = "Checking URL '" + settings.DEFINED_WEBROOT + "' for command execution output."
     print(settings.print_debug_msg(debug_msg))
 
   return output
