@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@ import subprocess
 from src.utils import menu
 from src.utils import settings
 from src.utils import requirments
+from src.utils import common
 from src.thirdparty.six.moves import input as _input
 from src.thirdparty.colorama import Fore, Back, Style, init
 
@@ -135,20 +136,14 @@ def check_for_update():
        ((int(settings.VERSION_NUM.replace(".","")[:2]) == int(update_version.replace(".","")[:2])) and \
          int(settings.VERSION_NUM.replace(".","")[2:]) < int(update_version.replace(".","")[2:])):
       while True:
-        if not menu.options.batch:
-          question_msg = "Do you want to update to the latest version now? [Y/n] > "
-          do_update = _input(settings.print_question_msg(question_msg))
-        else:
-          do_update = ""
-        if len(do_update) == 0:
-          do_update = "Y"
+        message = "Do you want to update to the latest version now? [Y/n] > "
+        do_update = common.read_input(message, default="Y", check_batch=True)
         if do_update in settings.CHOICE_YES:
-            updater()
+          updater()
         elif do_update in settings.CHOICE_NO:
           break
         else:
-          err_msg = "'" + do_update + "' is not a valid answer."  
-          print(settings.print_error_msg(err_msg))
+          common.invalid_option(do_update)  
           pass
   except KeyboardInterrupt:
     raise
@@ -234,24 +229,18 @@ def check_unicorn_version(current_version):
         warn_msg = "TrustedSec's Magic Unicorn seems to be not installed."
         print(settings.print_warning_msg(warn_msg)) 
       while True:
-        if not menu.options.batch:
-          if len(current_version) == 0:
-            action = "install"
-          else:
-            action = "update to"
-          question_msg = "Do you want to " + action + " the latest version now? [Y/n] > "
-          do_update = _input(settings.print_question_msg(question_msg))
+        if len(current_version) == 0:
+          action = "install"
         else:
-          do_update = ""
-        if len(do_update) == 0:
-          do_update = "Y"
+          action = "update to"
+        message = "Do you want to " + action + " the latest version now? [Y/n] > "
+        do_update = common.read_input(message, default="Y", check_batch=True)
         if do_update in settings.CHOICE_YES:
             unicorn_updater(current_version)
         elif do_update in settings.CHOICE_NO:
           break
         else:
-          err_msg = "'" + do_update + "' is not a valid answer."  
-          print(settings.print_error_msg(err_msg))
+          common.invalid_option(do_update)  
           pass
 
   except KeyboardInterrupt:

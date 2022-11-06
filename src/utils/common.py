@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,8 +23,111 @@ import hashlib
 import traceback
 from src.utils import menu
 from src.utils import settings
+from src.thirdparty import six
 from src.thirdparty.six.moves import input as _input
 from src.thirdparty.six.moves import urllib as _urllib
+
+"""
+Invalid option msg
+"""
+def invalid_option(option):
+  err_msg = "'" + option + "' is not a valid answer."
+  print(settings.print_error_msg(err_msg))
+
+"""
+Invalid cmd output
+"""
+def invalid_cmd_output(cmd):
+  err_msg = "The execution of '" + cmd + "' command, does not return any output."
+  return err_msg 
+
+"""
+Reads input from terminal
+"""
+def read_input(message, default=None, check_batch=True):
+
+  def is_empty():
+    value = _input(settings.print_message(message))
+    if len(value) == 0:
+      return default
+    else:
+      return value
+
+  try:
+    value = None
+    if "\n" in message:
+      message += ("\n" if message.count("\n") > 1 else "")
+
+    elif len(message) == 0:
+      return is_empty()
+
+    if settings.ANSWERS:
+      if not any(_ in settings.ANSWERS for _ in ",="):
+        return is_empty()
+      else:
+        for item in settings.ANSWERS.split(','):
+          question = item.split('=')[0].strip()
+          answer = item.split('=')[1] if len(item.split('=')) > 1 else None
+          if answer and question.lower() in message.lower():
+            value = answer
+            print(settings.print_message(message + str(value)))
+            return value
+          elif answer is None and value:
+            return is_empty()
+
+    if value:
+      if settings.VERBOSITY_LEVEL != 0:
+        debug_msg = "Used the given answer."
+        print(settings.print_debug_msg(debug_msg))
+      print(settings.print_message(message + str(value)))
+      return value
+
+    elif value is None:
+      if check_batch and menu.options.batch:
+        if settings.VERBOSITY_LEVEL != 0:
+          debug_msg = "Used the default behavior, running in batch mode."
+          print(settings.print_debug_msg(debug_msg))
+        print(settings.print_message(message + str(default)))
+        return default
+      else:
+        return is_empty()
+  except KeyboardInterrupt:
+    print(settings.SINGLE_WHITESPACE)
+    raise
+
+"""
+Extract regex result
+"""
+def extract_regex_result(regex, content):
+  result = None
+  if regex and content and "?P<result>" in regex:
+    match = re.search(regex, content)
+    if match:
+      result = match.group("result")
+  return result
+
+"""
+Returns True if the current process is run under admin privileges
+"""
+def running_as_admin():
+  is_admin = False
+  if settings.PLATFORM in ("posix", "mac"):
+    _ = os.geteuid()
+    if isinstance(_, (float, six.integer_types)) and _ == 0:
+      is_admin = True  
+
+  elif settings.IS_WINDOWS:
+    import ctypes
+    _ = ctypes.windll.shell32.IsUserAnAdmin()
+    if isinstance(_, (float, six.integer_types)) and _ == 1:
+      is_admin = True
+  else:
+    err_msg = settings.APPLICATION + " is not able to check if you are running it "
+    err_msg += "as an administrator account on this platform. "
+    print(settings.print_error_msg(err_msg))
+    is_admin = True
+
+  return is_admin
 
 """
 Get total number of days from last update
@@ -48,29 +151,23 @@ def create_github_issue(err_msg, exc_msg):
   _ = re.sub(r".+\Z", "", _)
   _ = re.sub(r"(Unicode[^:]*Error:).+", r"\g<1>", _)
   _ = re.sub(r"= _", "= ", _)
-  _ = _.encode(settings.UNICODE_ENCODING)
+  _ = _.encode(settings.DEFAULT_CODEC)
   
   bug_report =  "Bug Report: Unhandled exception \"" + str([i for i in exc_msg.split('\n') if i][-1]) + "\""
 
   while True:
     try:
-      if not menu.options.batch:
-        question_msg = "Do you want to automatically create a new (anonymized) issue "
-        question_msg += "with the unhandled exception information at "
-        question_msg += "the official Github repository? [y/N] "
-        choise = _input(settings.print_question_msg(question_msg))
-      else:
-        choise = ""
-      if len(choise) == 0:
-        choise = "n"
+      message = "Do you want to automatically create a new (anonymized) issue "
+      message += "with the unhandled exception information at "
+      message += "the official Github repository? [y/N] "
+      choise = common.read_input(message, default="N", check_batch=True)
       if choise in settings.CHOICE_YES:
         break
       elif choise in settings.CHOICE_NO:
         print(settings.SINGLE_WHITESPACE)
         return
       else:
-        err_msg = "'" + choise + "' is not a valid answer."  
-        print(settings.print_error_msg(err_msg))
+        invalid_option(choise)  
         pass
     except: 
       print("\n")
@@ -78,7 +175,7 @@ def create_github_issue(err_msg, exc_msg):
 
   err_msg = err_msg[err_msg.find("\n"):]
   request = _urllib.request.Request(url="https://api.github.com/search/issues?q=" + \
-        _urllib.parse.quote("repo:commixproject/commix" + " " + str(bug_report))
+        _urllib.parse.quote("repo:commixproject/commix" + settings.SINGLE_WHITESPACE + str(bug_report))
         )
 
   try:
@@ -100,14 +197,14 @@ def create_github_issue(err_msg, exc_msg):
   data = {"title": str(bug_report), "body": "```" + str(err_msg) + "\n```\n```\n" + str(exc_msg) + "```"}
   request = _urllib.request.Request(url = "https://api.github.com/repos/commixproject/commix/issues", 
                                 data = json.dumps(data).encode(), 
-                                headers = {"Authorization": "token " + base64.b64decode(settings.GITHUB_REPORT_OAUTH_TOKEN.encode(settings.UNICODE_ENCODING)).decode()}
+                                headers = {"Authorization": "token " + base64.b64decode(settings.GITHUB_REPORT_OAUTH_TOKEN.encode(settings.DEFAULT_CODEC)).decode()}
                                 )
   try:
     content = _urllib.request.urlopen(request, timeout=settings.TIMEOUT).read()
   except Exception as err:
     content = None
 
-  issue_url = re.search(r"https://github.com/commixproject/commix/issues/\d+", content.decode(settings.UNICODE_ENCODING) or "")
+  issue_url = re.search(r"https://github.com/commixproject/commix/issues/\d+", content.decode(settings.DEFAULT_CODEC) or "")
   if issue_url:
     info_msg = "The created Github issue can been found at the address '" + str(issue_url.group(0)) + "'.\n"
     print(settings.print_info_msg(info_msg))
@@ -140,13 +237,6 @@ def unhandled_exception():
     print(settings.print_critical_msg(err_msg)) 
     raise SystemExit()
 
-  elif all(_ in exc_msg for _ in ("No such file", "_'")):
-    err_msg = "Corrupted installation detected ('" + exc_msg.strip().split('\n')[-1] + "'). "
-    err_msg += "You should retrieve the latest development version from official GitHub "
-    err_msg += "repository at '" + settings.GIT_URL + "'."
-    print(settings.print_critical_msg(err_msg))
-    raise SystemExit()
-
   elif "must be pinned buffer, not bytearray" in exc_msg:
     err_msg = "Error occurred at Python interpreter which "
     err_msg += "is fixed in 2.7.x. Please update accordingly. "
@@ -154,7 +244,7 @@ def unhandled_exception():
     print(settings.print_critical_msg(err_msg))
     raise SystemExit()
 
-  elif "MemoryError" in exc_msg:
+  elif any(_ in exc_msg for _ in ("MemoryError", "Cannot allocate memory")):
     err_msg = "Memory exhaustion detected."
     print(settings.print_critical_msg(err_msg))
     raise SystemExit()
@@ -172,6 +262,13 @@ def unhandled_exception():
 
   elif all(_ in exc_msg for _ in ("Permission denied", "metasploit")):
     err_msg = "Permission error occurred while using Metasploit."
+    print(settings.print_critical_msg(err_msg))
+    raise SystemExit()
+
+  elif "Invalid argument" in exc_msg:
+    err_msg = "Corrupted installation detected. "
+    err_msg += "You should retrieve the latest (dev) version from official GitHub "
+    err_msg += "repository at '" + settings.GIT_URL + "'."
     print(settings.print_critical_msg(err_msg))
     raise SystemExit()
 

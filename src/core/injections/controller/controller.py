@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@ import sys
 from src.utils import menu
 from src.utils import logs
 from src.utils import settings
+from src.utils import common
 from src.utils import session_handler
 from src.core.requests import headers
 from src.core.requests import requests
@@ -50,7 +51,8 @@ def check_for_stored_sessions(url, http_request_method):
         settings.SESSION_APPLIED_TECHNIQUES = session_handler.applied_techniques(url, http_request_method)
         menu.options.tech = settings.SESSION_APPLIED_TECHNIQUES
       if session_handler.check_stored_parameter(url, http_request_method):
-        settings.LOAD_SESSION = True
+        if not settings.MULTI_TARGETS or settings.IS_TTY:
+          settings.LOAD_SESSION = True
         return True    
         
 """
@@ -63,67 +65,138 @@ def check_for_stored_levels(url, http_request_method):
       menu.options.level = session_handler.applied_levels(url, http_request_method)
       if type(menu.options.level) is not int :
         menu.options.level = settings.DEFAULT_INJECTION_LEVEL
-        
+
 """
-Basic heuristic checks for code injection warnings
+Heuristic (basic) tests for command injection
 """
-def heuristic_basic(url, http_request_method):
+def command_injection_heuristic_basic(url, http_request_method, check_parameter, the_type, header_name, inject_http_headers):
+  if menu.options.alter_shell:
+    basic_payloads = settings.ALTER_SHELL_BASIC_COMMAND_INJECTION_PAYLOADS
+  else:
+    basic_payloads = settings.BASIC_COMMAND_INJECTION_PAYLOADS
+  settings.CLASSIC_STATE = True
+  try:
+    whitespace = settings.WHITESPACES[0]
+    if not settings.IDENTIFIED_COMMAND_INJECTION or settings.MULTI_TARGETS:  
+      _ = 0
+      for payload in basic_payloads:
+        _ = _ + 1
+        if not inject_http_headers or (inject_http_headers and "'Host'" in check_parameter):
+          if not any((settings.IS_JSON, settings.IS_XML)):
+            payload = _urllib.parse.quote(payload)
+        payload = parameters.prefixes(payload, prefix="")
+        payload = parameters.suffixes(payload, suffix="")
+        payload = checks.perform_payload_modification(payload).replace(whitespace, settings.WHITESPACES[0])
+        if settings.VERBOSITY_LEVEL >= 1:
+          print(settings.print_payload(payload))
+        data = None
+        cookie = None
+        tmp_url = url
+        if menu.options.cookie and settings.INJECT_TAG in menu.options.cookie:
+          cookie = menu.options.cookie.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload).encode(settings.DEFAULT_CODEC)
+        elif menu.options.data and http_request_method == settings.HTTPMETHOD.POST:
+          if inject_http_headers:
+            data = menu.options.data.replace(settings.INJECT_TAG,"").encode(settings.DEFAULT_CODEC)
+          else: 
+            data = menu.options.data.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload).encode(settings.DEFAULT_CODEC)
+        else:
+          if settings.INJECT_TAG in url:
+            tmp_url = url.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload)
+        request = _urllib.request.Request(tmp_url, data)
+        if cookie:
+          request.add_header(settings.COOKIE, cookie)
+        if inject_http_headers:
+          request.add_header(check_parameter.replace("'","").strip(), (settings.CUSTOM_HEADER_VALUE + payload).encode(settings.DEFAULT_CODEC))
+        headers.do_check(request)
+        response = requests.get_request_response(request)
+
+        if type(response) is not bool:
+          html_data = checks.page_encoding(response, action="decode")
+          match = re.search(settings.BASIC_COMMAND_INJECTION_RESULT, html_data)
+          if match:
+            settings.IDENTIFIED_COMMAND_INJECTION = True
+            info_msg = "Heuristic (basic) tests shows that "
+            info_msg += settings.CHECKING_PARAMETER + " might be injectable (possible OS: '" + ('Unix-like', 'Windows')[_ != 1] + "')." 
+            print(settings.print_bold_info_msg(info_msg))
+            break
+
+    settings.CLASSIC_STATE = False
+    return url
+
+  except (_urllib.error.URLError, _urllib.error.HTTPError) as err_msg:
+    print(settings.print_critical_msg(err_msg))
+    raise SystemExit()
+
+"""
+Heuristic (basic) tests for code injection warnings
+"""
+def code_injections_heuristic_basic(url, http_request_method, check_parameter, the_type, header_name, inject_http_headers):
   injection_type = "results-based dynamic code evaluation"
   technique = "dynamic code evaluation technique"
   technique = "(" + injection_type.split(" ")[0] + ") " + technique + ""
-
-  if menu.options.skip_heuristics:
-    if settings.VERBOSITY_LEVEL != 0:   
-      debug_msg = "Skipping (basic) heuristic detection for " + technique + "."
-      print(settings.print_debug_msg(debug_msg))
-    return url
-  else:
-    settings.EVAL_BASED_STATE = True
+  settings.EVAL_BASED_STATE = True
+  try:
     try:
-      try:
-        if re.findall(r"=(.*)&", url):
-          url = url.replace("/&", "/e&")
-        elif re.findall(r"=(.*)&", menu.options.data):
-          menu.options.data = menu.options.data.replace("/&", "/e&")
-      except TypeError as err_msg:
-        pass
-      if not settings.IDENTIFIED_WARNINGS and not settings.IDENTIFIED_PHPINFO:  
-        if settings.VERBOSITY_LEVEL != 0:   
-          debug_msg = "Starting (basic) heuristic detection for " + technique + "."
-          print(settings.print_debug_msg(debug_msg))
-        for payload in settings.PHPINFO_CHECK_PAYLOADS:
-          payload = checks.perform_payload_modification(payload)
-          if settings.VERBOSITY_LEVEL >= 1:
-            print(settings.print_payload(payload))
-          if not menu.options.data:
-            request = _urllib.request.Request(url.replace(settings.INJECT_TAG, payload))
+      if re.findall(r"=(.*)&", url):
+        url = url.replace("/&", "/e&")
+      elif re.findall(r"=(.*)&", menu.options.data):
+        menu.options.data = menu.options.data.replace("/&", "/e&")
+    except TypeError as err_msg:
+      pass
+    if (not settings.IDENTIFIED_WARNINGS and not settings.IDENTIFIED_PHPINFO) or settings.MULTI_TARGETS:  
+      for payload in settings.PHPINFO_CHECK_PAYLOADS:
+        if not inject_http_headers or (inject_http_headers and "'Host'" in check_parameter):
+          if not any((settings.IS_JSON, settings.IS_XML)):
+            payload = _urllib.parse.quote(payload)
+        payload = parameters.prefixes(payload, prefix="")
+        payload = parameters.suffixes(payload, suffix="")
+        payload = checks.perform_payload_modification(payload)
+        if settings.VERBOSITY_LEVEL >= 1:
+          print(settings.print_payload(payload))
+        data = None
+        cookie = None
+        tmp_url = url
+        if menu.options.cookie and settings.INJECT_TAG in menu.options.cookie:
+          cookie = menu.options.cookie.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload).encode(settings.DEFAULT_CODEC)
+        elif menu.options.data and http_request_method == settings.HTTPMETHOD.POST:
+          if inject_http_headers:
+            data = menu.options.data.replace(settings.INJECT_TAG,"").encode(settings.DEFAULT_CODEC)
+          else: 
+            data = menu.options.data.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload).encode(settings.DEFAULT_CODEC)
+        else:
+          if settings.INJECT_TAG in url:
+            tmp_url = url.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload)
+        request = _urllib.request.Request(tmp_url, data)
+        if cookie:
+          request.add_header(settings.COOKIE, cookie)
+        if inject_http_headers:
+          request.add_header(check_parameter.replace("'","").strip(), (settings.CUSTOM_HEADER_VALUE + payload).encode(settings.DEFAULT_CODEC))
+        headers.do_check(request)
+        response = requests.get_request_response(request)
+
+        if type(response) is not bool:
+          html_data = checks.page_encoding(response, action="decode")
+          match = re.search(settings.CODE_INJECTION_PHPINFO, html_data)
+          if match:
+            technique = technique + " (possible PHP version: '" + match.group(1) + "')"
+            settings.IDENTIFIED_PHPINFO = True
           else:
-            data = menu.options.data.replace(settings.INJECT_TAG, payload)
-            request = _urllib.request.Request(url, data.encode(settings.UNICODE_ENCODING))
-          headers.do_check(request)
-          response = requests.get_request_response(request)
-          if type(response) is not bool:
-            html_data = checks.page_encoding(response, action="decode")
-            match = re.search(settings.CODE_INJECTION_PHPINFO, html_data)
-            if match:
-              technique = technique + " (possible PHP version: '" + match.group(1) + "')"
-              settings.IDENTIFIED_PHPINFO = True
-            else:
-              for warning in settings.CODE_INJECTION_WARNINGS:
-                if warning in html_data:
-                  settings.IDENTIFIED_WARNINGS = True
-                  break
-            if settings.IDENTIFIED_WARNINGS or settings.IDENTIFIED_PHPINFO:
-              info_msg = "Heuristic detection shows that target might be injectable via " + technique + "." 
-              print(settings.print_bold_info_msg(info_msg))
-              break
+            for warning in settings.CODE_INJECTION_WARNINGS:
+              if warning in html_data:
+                settings.IDENTIFIED_WARNINGS = True
+                break
+          if settings.IDENTIFIED_WARNINGS or settings.IDENTIFIED_PHPINFO:
+            info_msg = "Heuristic (basic) tests shows that "
+            info_msg += settings.CHECKING_PARAMETER + " might be injectable via " + technique + "." 
+            print(settings.print_bold_info_msg(info_msg))
+            break
 
-      settings.EVAL_BASED_STATE = False
-      return url
+    settings.EVAL_BASED_STATE = False
+    return url
 
-    except (_urllib.error.URLError, _urllib.error.HTTPError) as err_msg:
-      print(settings.print_critical_msg(err_msg))
-      raise SystemExit()
+  except (_urllib.error.URLError, _urllib.error.HTTPError) as err_msg:
+    print(settings.print_critical_msg(err_msg))
+    raise SystemExit()
 
 # Check if it's exploitable via classic command injection technique.
 def classic_command_injection_technique(url, timesec, filename, http_request_method):
@@ -135,15 +208,10 @@ def classic_command_injection_technique(url, timesec, filename, http_request_met
       if cb_handler.exploitation(url, timesec, filename, http_request_method, injection_type, technique) != False:
         if (len(menu.options.tech) == 0 or "e" in menu.options.tech):
           while True:
-            if not menu.options.batch:
-              settings.CLASSIC_STATE = True
-              question_msg = "Skipping of code injection tests is recommended. "
-              question_msg += "Do you agree? [Y/n] > "
-              procced_option = _input(settings.print_question_msg(question_msg))
-            else:
-              procced_option = ""
-            if len(procced_option) == 0:
-               procced_option = "Y"
+            settings.CLASSIC_STATE = True
+            message = "Skipping of code injection tests is recommended. "
+            message += "Do you agree? [Y/n] > "
+            procced_option = common.read_input(message, default="Y", check_batch=True)
             if procced_option in settings.CHOICE_YES:
               settings.SKIP_CODE_INJECTIONS = True
               break
@@ -152,8 +220,7 @@ def classic_command_injection_technique(url, timesec, filename, http_request_met
             elif procced_option in settings.CHOICE_QUIT:
               raise SystemExit()
             else:
-              err_msg = "'" + procced_option + "' is not a valid answer."  
-              print(settings.print_error_msg(err_msg))
+              common.invalid_option(procced_option)  
               pass
       else:
         settings.CLASSIC_STATE = False
@@ -171,15 +238,10 @@ def dynamic_code_evaluation_technique(url, timesec, filename, http_request_metho
       settings.EVAL_BASED_STATE = None
       if eb_handler.exploitation(url, timesec, filename, http_request_method, injection_type, technique) != False:
         while True:
-          if not menu.options.batch:
-            settings.EVAL_BASED_STATE = True
-            question_msg = "Skipping of further command injection checks is recommended. "
-            question_msg += "Do you agree? [Y/n] > "
-            procced_option = _input(settings.print_question_msg(question_msg))
-          else:
-            procced_option = ""
-          if len(procced_option) == 0:
-             procced_option = "Y"
+          settings.EVAL_BASED_STATE = True
+          message = "Skipping of further command injection checks is recommended. "
+          message += "Do you agree? [Y/n] > "
+          procced_option = common.read_input(message, default="Y", check_batch=True)
           if procced_option in settings.CHOICE_YES:
             settings.SKIP_COMMAND_INJECTIONS = True
             break
@@ -190,8 +252,7 @@ def dynamic_code_evaluation_technique(url, timesec, filename, http_request_metho
           elif procced_option in settings.CHOICE_QUIT:
             raise SystemExit()
           else:
-            err_msg = "'" + procced_option + "' is not a valid answer."  
-            print(settings.print_error_msg(err_msg))
+            common.invalid_option(procced_option)  
             pass
       else:
         settings.EVAL_BASED_STATE = False
@@ -203,7 +264,6 @@ def dynamic_code_evaluation_technique(url, timesec, filename, http_request_metho
     if settings.VERBOSITY_LEVEL != 0:   
       debug_msg = "Skipping test the " + "(" + injection_type.split(" ")[0] + ") " + technique + ". "
       print(settings.print_debug_msg(debug_msg))
-
 
 # Check if it's exploitable via time-based command injection technique.
 def timebased_command_injection_technique(url, timesec, filename, http_request_method, url_time_response):
@@ -241,6 +301,12 @@ def filebased_command_injection_technique(url, timesec, filename, http_request_m
 Proceed to the injection process for the appropriate parameter.
 """
 def injection_proccess(url, check_parameter, http_request_method, filename, timesec):
+  inject_http_headers = False
+  if (http_request_method == settings.HTTPMETHOD.GET and check_parameter.lower() not in url) or \
+  (http_request_method == settings.HTTPMETHOD.POST and menu.options.data and check_parameter.lower() not in menu.options.data):
+    if any(x in check_parameter.lower() for x in settings.HTTP_HEADERS) or \
+       any(x in check_parameter.lower() for x in settings.CUSTOM_HEADER_NAME):
+      inject_http_headers = True
 
   if menu.options.ignore_code: 
     info_msg = "Ignoring '" + str(menu.options.ignore_code) + "' HTTP error code. "
@@ -261,10 +327,11 @@ def injection_proccess(url, check_parameter, http_request_method, filename, time
   # Host HTTP header / Custom HTTP header Injection(s)
   if check_parameter.startswith(" "):
     header_name = ""
-    the_type = " HTTP header"
+    the_type = "HTTP header"
+    check_parameter = " '" + check_parameter.strip() + "'"
   else:
     if settings.COOKIE_INJECTION: 
-      header_name = " cookie"
+      header_name = "Cookie"
     else:
       header_name = ""
     the_type = " parameter"
@@ -272,22 +339,44 @@ def injection_proccess(url, check_parameter, http_request_method, filename, time
 
   # Estimating the response time (in seconds)
   timesec, url_time_response = requests.estimate_response_time(url, timesec)
+
   # Load modules
   modules_handler.load_modules(url, http_request_method, filename)
+  checks.tamper_scripts(stored_tamper_scripts=False)
 
-  if not settings.LOAD_SESSION:
-    if (len(menu.options.tech) == 0 or "e" in menu.options.tech):
+  settings.CHECKING_PARAMETER = ""
+  if not header_name == "Cookie" and not the_type == "HTTP header":
+    settings.CHECKING_PARAMETER = str(http_request_method)
+  settings.CHECKING_PARAMETER += ('', ' (JSON)')[settings.IS_JSON] + ('', ' (SOAP/XML)')[settings.IS_XML] 
+  if header_name == "Cookie" :
+     settings.CHECKING_PARAMETER += str(header_name) + str(the_type) + str(check_parameter)
+  else:
+     settings.CHECKING_PARAMETER += str(the_type) + str(header_name) + str(check_parameter)
+
+  info_msg = "Setting " + settings.CHECKING_PARAMETER  + " for tests."
+  print(settings.print_info_msg(info_msg))
+
+  if menu.options.skip_heuristics:
+    if settings.VERBOSITY_LEVEL != 0:   
+      debug_msg = "Skipping heuristic (basic) tests to the target URL."
+      print(settings.print_debug_msg(debug_msg))
+  else:
+    if not settings.LOAD_SESSION:
+      checks.recognise_payload(payload=settings.TESTABLE_VALUE)
+    if settings.VERBOSITY_LEVEL != 0:    
+      debug_msg = "Performing heuristic (basic) tests to the target URL."
+      print(settings.print_debug_msg(debug_msg))
+    url = command_injection_heuristic_basic(url, http_request_method, check_parameter, the_type, header_name, inject_http_headers)
+
+    if (len(menu.options.tech) == 0 or "e" in menu.options.tech) and not settings.IDENTIFIED_COMMAND_INJECTION:
       # Check for identified warnings
-      url = heuristic_basic(url, http_request_method)
+      url = code_injections_heuristic_basic(url, http_request_method, check_parameter, the_type, header_name, inject_http_headers)
       if settings.IDENTIFIED_WARNINGS or settings.IDENTIFIED_PHPINFO:
         while True:
-          if not menu.options.batch:
-            question_msg = "Skipping of further command injection tests is recommended. "
-            question_msg += "Do you agree? [Y/n] > "
-            procced_option = _input(settings.print_question_msg(question_msg))
-          else:
-            procced_option = ""
-          if procced_option in settings.CHOICE_YES or len(procced_option) == 0:
+          message = "Skipping of further command injection tests is recommended. "
+          message += "Do you agree? [Y/n] > "
+          procced_option = common.read_input(message, default="Y", check_batch=True)
+          if procced_option in settings.CHOICE_YES:
             settings.CLASSIC_STATE = settings.TIME_BASED_STATE = settings.FILE_BASED_STATE = False
             settings.EVAL_BASED_STATE = settings.SKIP_COMMAND_INJECTIONS = True
             break
@@ -296,19 +385,13 @@ def injection_proccess(url, check_parameter, http_request_method, filename, time
           elif procced_option in settings.CHOICE_QUIT:
             raise SystemExit()
           else:
-            err_msg = "'" + procced_option + "' is not a valid answer."  
-            print(settings.print_error_msg(err_msg))
+            common.invalid_option(procced_option)  
             pass
 
-    info_msg = "Setting the" 
-    if not header_name == " cookie" and not the_type == " HTTP header":
-      info_msg += " " + str(http_request_method) + ""
-    info_msg += ('', ' (JSON)')[settings.IS_JSON] + ('', ' (SOAP/XML)')[settings.IS_XML] 
-    if header_name == " cookie" :
-      info_msg += str(header_name) + str(the_type) + str(check_parameter) + " for tests."
-    else:
-      info_msg += str(the_type) + str(header_name) + str(check_parameter) + " for tests."
-    print(settings.print_info_msg(info_msg))
+      if not settings.IDENTIFIED_COMMAND_INJECTION and not settings.IDENTIFIED_WARNINGS and not settings.IDENTIFIED_PHPINFO:
+        warn_msg = "Heuristic (basic) tests shows that "
+        warn_msg += settings.CHECKING_PARAMETER + " might not be injectable."
+        print(settings.print_bold_warning_msg(warn_msg)) 
 
   if menu.options.failed_tries and \
      menu.options.tech and not "f" in menu.options.tech and not \
@@ -332,7 +415,8 @@ def injection_proccess(url, check_parameter, http_request_method, filename, time
     classic_command_injection_technique(url, timesec, filename, http_request_method)
   else:
     classic_command_injection_technique(url, timesec, filename, http_request_method)
-    dynamic_code_evaluation_technique(url, timesec, filename, http_request_method)
+    if not settings.IDENTIFIED_COMMAND_INJECTION:
+      dynamic_code_evaluation_technique(url, timesec, filename, http_request_method)
   timebased_command_injection_technique(url, timesec, filename, http_request_method, url_time_response)
   filebased_command_injection_technique(url, timesec, filename, http_request_method, url_time_response)
 
@@ -342,52 +426,57 @@ def injection_proccess(url, check_parameter, http_request_method, filename, time
     if header_name != " cookie" and the_type != " HTTP header":
       warn_msg += " " + str(http_request_method) + ""
     warn_msg += str(the_type) + str(header_name) + str(check_parameter)
-    warn_msg += " seems to be not injectable."
-    print(settings.print_warning_msg(warn_msg))
+    warn_msg += " does not seem to be injectable."
+    print(settings.print_bold_warning_msg(warn_msg))
 
 """
 Inject HTTP headers (User-agent / Referer / Host) (if level > 2).
 """
 def http_headers_injection(url, http_request_method, filename, timesec):
   # Disable Cookie Injection 
-  settings.COOKIE_INJECTION = False
+  settings.COOKIE_INJECTION = None
 
   def user_agent_injection(url, http_request_method, filename, timesec): 
     user_agent = menu.options.agent
     if not menu.options.shellshock:
-      menu.options.agent = settings.INJECT_TAG
+      menu.options.agent = menu.options.agent + settings.INJECT_TAG
     settings.USER_AGENT_INJECTION = True
     if settings.USER_AGENT_INJECTION:
       check_parameter = header_name = " User-Agent"
       settings.HTTP_HEADER = header_name[1:].replace("-","").lower()
       check_for_stored_sessions(url, http_request_method)
-      injection_proccess(url, check_parameter, http_request_method, filename, timesec)
-    settings.USER_AGENT_INJECTION = False
+      if not injection_proccess(url, check_parameter, http_request_method, filename, timesec):
+        settings.USER_AGENT_INJECTION = None
     menu.options.agent = user_agent
 
   def referer_injection(url, http_request_method, filename, timesec):
     referer = menu.options.referer
     if not menu.options.shellshock:
-      menu.options.referer = settings.INJECT_TAG
+      if menu.options.referer is None:
+        menu.options.referer = ""
+      menu.options.referer = menu.options.referer + settings.INJECT_TAG
     settings.REFERER_INJECTION = True
     if settings.REFERER_INJECTION:
-      check_parameter =  header_name = " Referer"
+      check_parameter = header_name = " Referer"
       settings.HTTP_HEADER = header_name[1:].lower()
       check_for_stored_sessions(url, http_request_method)
-      injection_proccess(url, check_parameter, http_request_method, filename, timesec)
-    settings.REFERER_INJECTION = False 
+      if not injection_proccess(url, check_parameter, http_request_method, filename, timesec):
+        settings.REFERER_INJECTION = False 
     menu.options.agent = referer
 
   def host_injection(url, http_request_method, filename, timesec):
-    if not menu.options.shellshock:
-      menu.options.host = settings.INJECT_TAG
+    host = menu.options.host
+    if menu.options.host is None:
+      menu.options.host = ""
+    menu.options.host = menu.options.host + settings.INJECT_TAG
     settings.HOST_INJECTION = True
     if settings.HOST_INJECTION:
-      check_parameter =  header_name = " Host"
+      check_parameter = header_name = " Host"
       settings.HTTP_HEADER = header_name[1:].lower()
       check_for_stored_sessions(url, http_request_method)
-      injection_proccess(url, check_parameter, http_request_method, filename, timesec)
-      settings.HOST_INJECTION = False 
+      if not injection_proccess(url, check_parameter, http_request_method, filename, timesec):
+        settings.HOST_INJECTION = False 
+    menu.options.host = host
 
   # User-Agent HTTP header injection
   if menu.options.skip_parameter == None:
@@ -472,7 +561,6 @@ def cookie_injection(url, http_request_method, filename, timesec):
       if check_parameter != parameter:
         if len(check_parameter) > 0:
           settings.TESTABLE_PARAMETER = check_parameter
-
         # Check if testable parameter(s) are provided
         if len(settings.TEST_PARAMETER) > 0:
           if menu.options.test_parameter != None:
@@ -480,6 +568,7 @@ def cookie_injection(url, http_request_method, filename, timesec):
             for check_parameter in check_parameters:
               if check_parameter in "".join(settings.TEST_PARAMETER).split(","):
                 menu.options.cookie = cookie_parameters[param_counter]
+                check_parameter = parameters.specify_cookie_parameter(menu.options.cookie)
                 # Check for session file 
                 check_for_stored_sessions(url, http_request_method)
                 injection_proccess(url, check_parameter, http_request_method, filename, timesec) 
@@ -501,7 +590,6 @@ Check if HTTP Method is GET.
 """ 
 def get_request(url, http_request_method, filename, timesec):
 
-  #if not settings.COOKIE_INJECTION:
   found_url = parameters.do_GET_check(url, http_request_method)
   if found_url != False:
 
@@ -520,7 +608,6 @@ def get_request(url, http_request_method, filename, timesec):
       if check_parameter != url:
         if len(check_parameter) > 0:
           settings.TESTABLE_PARAMETER = check_parameter
-          
         # Check if testable parameter(s) are provided
         if len(settings.TESTABLE_PARAMETER) > 0:
           if menu.options.test_parameter != None:
@@ -528,6 +615,7 @@ def get_request(url, http_request_method, filename, timesec):
             for check_parameter in check_parameters:
               if check_parameter in "".join(settings.TEST_PARAMETER).split(","):
                 url = found_url[url_counter]
+                check_parameter = parameters.vuln_GET_param(url)
                 # Check for session file 
                 check_for_stored_sessions(url, http_request_method)
                 injection_proccess(url, check_parameter, http_request_method, filename, timesec)
@@ -542,16 +630,11 @@ def get_request(url, http_request_method, filename, timesec):
           check_for_stored_sessions(url, http_request_method)
           injection_proccess(url, check_parameter, http_request_method, filename, timesec)
 
-  # Enable Cookie Injection
-  if menu.options.level > settings.DEFAULT_INJECTION_LEVEL and menu.options.cookie:
-    settings.COOKIE_INJECTION = True
-
 """
 Check if HTTP Method is POST.
 """ 
 def post_request(url, http_request_method, filename, timesec):
 
-  # Check if HTTP Method is POST.
   parameter = menu.options.data
   found_parameter = parameters.do_POST_check(parameter, http_request_method)
 
@@ -592,6 +675,8 @@ def post_request(url, http_request_method, filename, timesec):
           for check_parameter in check_parameters:
             if check_parameter in "".join(settings.TEST_PARAMETER).split(","):
               menu.options.data = found_parameter[param_counter]
+              check_parameter = parameters.vuln_POST_param(menu.options.data, url)
+              # Check for session file 
               check_for_stored_sessions(url, http_request_method)
               injection_proccess(url, check_parameter, http_request_method, filename, timesec)
             param_counter += 1
@@ -605,40 +690,37 @@ def post_request(url, http_request_method, filename, timesec):
         check_for_stored_sessions(url, http_request_method)
         injection_proccess(url, check_parameter, http_request_method, filename, timesec)
 
-  # Enable Cookie Injection
-  if menu.options.level > settings.DEFAULT_INJECTION_LEVEL and menu.options.cookie:
-    settings.COOKIE_INJECTION = True
-
 """
 Perform checks
 """
 def perform_checks(url, http_request_method, filename):
+  # Initiate whitespaces
+  if settings.MULTI_TARGETS or not settings.IS_TTY and len(settings.WHITESPACES) > 1:
+    settings.WHITESPACES = ["%20"]
 
   def basic_level_checks():
-    if not menu.options.bulkfile:
-      settings.PERFORM_BASIC_SCANS = False
-    else:
+    if settings.MULTI_TARGETS or not settings.IS_TTY:
       settings.PERFORM_BASIC_SCANS = True
-      settings.SKIP_CODE_INJECTIONS = False
-      settings.SKIP_COMMAND_INJECTIONS = False
-      settings.IDENTIFIED_WARNINGS = False
-      settings.IDENTIFIED_PHPINFO = False
-    # Check if HTTP Method is GET.
-    if not menu.options.data:
-      get_request(url, http_request_method, filename, timesec)
-    # Check if HTTP Method is POST.      
     else:
-      post_request(url, http_request_method, filename, timesec)
+      settings.PERFORM_BASIC_SCANS = False
+    settings.SKIP_CODE_INJECTIONS = False
+    settings.SKIP_COMMAND_INJECTIONS = False
+    settings.IDENTIFIED_COMMAND_INJECTION = False
+    settings.IDENTIFIED_WARNINGS = False
+    settings.IDENTIFIED_PHPINFO = False
 
   timesec = settings.TIMESEC
   # Check if authentication is needed.
   if menu.options.auth_url and menu.options.auth_data:
     # Do the authentication process.
     authentication.authentication_process()
-
-    # Check if authentication page is the same with the next (injection) URL
-    if _urllib.request.urlopen(url, timeout=settings.TIMEOUT).read() == _urllib.request.urlopen(menu.options.auth_url, timeout=settings.TIMEOUT).read():
-      err_msg = "It seems that the authentication procedure has failed."
+    try:
+      # Check if authentication page is the same with the next (injection) URL
+      if _urllib.request.urlopen(url, timeout=settings.TIMEOUT).read() == _urllib.request.urlopen(menu.options.auth_url, timeout=settings.TIMEOUT).read():
+        err_msg = "It seems that the authentication procedure has failed."
+        print(settings.print_critical_msg(err_msg))
+        raise SystemExit()
+    except (_urllib.error.URLError, _urllib.error.HTTPError) as err_msg:
       print(settings.print_critical_msg(err_msg))
       raise SystemExit()
   elif menu.options.auth_url or menu.options.auth_data: 
@@ -651,34 +733,45 @@ def perform_checks(url, http_request_method, filename):
   if menu.options.shellshock:
     menu.options.level = settings.HTTP_HEADER_INJECTION_LEVEL
   else:
+    if menu.options.level != settings.DEFAULT_INJECTION_LEVEL and settings.WILDCARD_CHAR_APPLIED != True:
+      menu.options.level = settings.USER_SUPPLIED_LEVEL
     check_for_stored_levels(url, http_request_method)
 
   if settings.PERFORM_BASIC_SCANS:
     basic_level_checks()
 
-  # Check for stored injections on User-agent / Referer / Host HTTP headers (if level > 2).
-  if menu.options.level >= settings.HTTP_HEADER_INJECTION_LEVEL:
-    if settings.INJECTED_HTTP_HEADER == False :
-      check_parameter = ""
-      stored_http_header_injection(url, check_parameter, http_request_method, filename, timesec)
+  # Custom header Injection
+  if settings.CUSTOM_HEADER_INJECTION == True:
+    check_parameter = header_name = " " + settings.CUSTOM_HEADER_NAME
+    settings.HTTP_HEADER = header_name[1:].lower()
+    check_for_stored_sessions(url, http_request_method)
+    injection_proccess(url, check_parameter, http_request_method, filename, timesec)
+    settings.CUSTOM_HEADER_INJECTION = None
+
+  # Check if defined POST data
+  if not settings.USER_DEFINED_POST_DATA:
+    get_request(url, http_request_method, filename, timesec)  
   else:
+    post_request(url, http_request_method, filename, timesec)
+
+  _ = menu.options.level
+  if _ >= settings.COOKIE_INJECTION_LEVEL:
+    menu.options.level = settings.COOKIE_INJECTION_LEVEL
     # Enable Cookie Injection
-    if menu.options.level > settings.DEFAULT_INJECTION_LEVEL:
-      if menu.options.cookie:
-        cookie_injection(url, http_request_method, filename, timesec)
-      else:
-        warn_msg = "The HTTP Cookie header is not provided, "
-        warn_msg += "so this test is going to be skipped."
-        print(settings.print_warning_msg(warn_msg))
+    if menu.options.cookie:
+      cookie_injection(url, http_request_method, filename, timesec)
     else:
-      # Custom header Injection
-      if settings.CUSTOM_HEADER_INJECTION == True:
-        check_parameter =  header_name = " " + settings.CUSTOM_HEADER_NAME
-        settings.HTTP_HEADER = header_name[1:].lower()
-        check_for_stored_sessions(url, http_request_method)
-        injection_proccess(url, check_parameter, http_request_method, filename, timesec)
-        settings.CUSTOM_HEADER_INJECTION = None
-  
+      warn_msg = "The HTTP Cookie header is not provided, "
+      warn_msg += "so this test is going to be skipped."
+      print(settings.print_warning_msg(warn_msg))
+    if _ == settings.HTTP_HEADER_INJECTION_LEVEL:
+      menu.options.level = settings.HTTP_HEADER_INJECTION_LEVEL
+      if settings.INJECTED_HTTP_HEADER == False :
+        check_parameter = ""
+        # Check for stored injections on User-agent / Referer / Host HTTP headers (if level > 2).
+        stored_http_header_injection(url, check_parameter, http_request_method, filename, timesec)
+      else:
+        http_headers_injection(url, http_request_method, filename, timesec)
 
   if settings.INJECTION_CHECKER == False:
     return False
@@ -689,72 +782,74 @@ def perform_checks(url, http_request_method, filename):
 General check on every injection technique.
 """
 def do_check(url, http_request_method, filename):
-  # Check for '--tor' option.
-  if menu.options.tor: 
-    if not menu.options.tech or "t" in menu.options.tech or "f" in menu.options.tech:
-      warn_msg = "It is highly recommended to avoid usage of switch '--tor' for "
-      warn_msg += "time-based injections because of inherent high latency time."
-      print(settings.print_warning_msg(warn_msg))
+  try:
+    if settings.RECHECK_FILE_FOR_EXTRACTION:
+      settings.RECHECK_FILE_FOR_EXTRACTION = False
 
-  # Check for "backticks" tamper script.
-  if settings.USE_BACKTICKS == True:
-    if not menu.options.tech or "e" in menu.options.tech or "t" in menu.options.tech or "f" in menu.options.tech:
-      warn_msg = "Commands substitution using backtics is only supported by the (results-based) classic command injection technique. "
-      print(settings.print_warning_msg(warn_msg) + Style.RESET_ALL)
+    # Check for '--tor' option.
+    if menu.options.tor: 
+      if not menu.options.tech or "t" in menu.options.tech or "f" in menu.options.tech:
+        warn_msg = "It is highly recommended to avoid usage of switch '--tor' for "
+        warn_msg += "time-based injections because of inherent high latency time."
+        print(settings.print_warning_msg(warn_msg))
 
-  # Check for "wizard" switch.
-  if menu.options.wizard:
-    if perform_checks(url, http_request_method, filename) == False:
-      scan_level = menu.options.level
-      while int(scan_level) < int(settings.HTTP_HEADER_INJECTION_LEVEL) and settings.LOAD_SESSION != True:
-        while True:
-          if not menu.options.batch:
-            question_msg = "Do you want to increase to '--level=" + str(scan_level + 1) 
-            question_msg += "' in order to perform more tests? [Y/n] > "
-            next_level = _input(settings.print_question_msg(question_msg))
-          else:
-            next_level = ""
-          if len(next_level) == 0:
-             next_level = "Y"
-          if next_level in settings.CHOICE_YES:
-            menu.options.level = int(menu.options.level + scan_level)
-            if perform_checks(url, http_request_method, filename) == False and scan_level < settings.HTTP_HEADER_INJECTION_LEVEL :
-              scan_level = scan_level + 1
+    # Check for "backticks" tamper script.
+    if settings.USE_BACKTICKS == True:
+      if not menu.options.tech or "e" in menu.options.tech or "t" in menu.options.tech or "f" in menu.options.tech:
+        warn_msg = "Commands substitution using backtics is only supported by the (results-based) classic command injection technique. "
+        print(settings.print_warning_msg(warn_msg) + Style.RESET_ALL)
+
+    # Check for "wizard" switch.
+    if menu.options.wizard:
+      if perform_checks(url, http_request_method, filename) == False:
+        scan_level = menu.options.level
+        while int(scan_level) < int(settings.HTTP_HEADER_INJECTION_LEVEL) and settings.LOAD_SESSION != True:
+          while True:
+            message = "Do you want to increase to '--level=" + str(scan_level + 1) 
+            message += "' in order to perform more tests? [Y/n] > "
+            next_level = common.read_input(message, default="Y", check_batch=True)
+            if next_level in settings.CHOICE_YES:
+              menu.options.level = int(menu.options.level + scan_level)
+              if perform_checks(url, http_request_method, filename) == False and scan_level < settings.HTTP_HEADER_INJECTION_LEVEL :
+                scan_level = scan_level + 1
+              else:
+                break  
+            elif next_level in settings.CHOICE_NO:
+              break
+            elif next_level in settings.CHOICE_QUIT:
+              raise SystemExit()
             else:
-              break  
-          elif next_level in settings.CHOICE_NO:
-            break
-          elif next_level in settings.CHOICE_QUIT:
-            raise SystemExit()
-          else:
-            err_msg = "'" + next_level + "' is not a valid answer."  
-            print(settings.print_error_msg(err_msg))
-            pass
-  else:
-    perform_checks(url, http_request_method, filename)
-    
-  # All injection techniques seems to be failed!
-  if settings.CLASSIC_STATE == settings.EVAL_BASED_STATE == settings.TIME_BASED_STATE == settings.FILE_BASED_STATE == False :
-    if settings.INJECTION_CHECKER == False and not settings.CHECK_BOTH_OS:
-      err_msg = "All tested parameters "
-      if menu.options.level > 2:
-        err_msg += "and HTTP headers "
-      err_msg += "appear to be not injectable."
-      if not menu.options.alter_shell :
-        err_msg += " Try to use the option '--alter-shell'"
-      else:
-        err_msg += " Try to remove the option '--alter-shell'"
-      if menu.options.level < settings.HTTP_HEADER_INJECTION_LEVEL :
-        err_msg += " and/or increase '--level' values to perform"
-        err_msg += " more tests (i.e 'User-Agent', 'Referer', 'Host', 'Cookie' etc)"
-      if menu.options.skip_empty:
-        err_msg += " and/or remove the option '--skip-empty'"  
-      err_msg += "."
-      print(settings.print_critical_msg(err_msg))
-
-  logs.print_logs_notification(filename, url)
-  if not settings.CHECK_BOTH_OS and not menu.options.bulkfile:
-    # if not menu.options.bulkfile or settings.EOF:
+              common.invalid_option(next_level)  
+              pass
+    else:
+      perform_checks(url, http_request_method, filename)
+      
+    # All injection techniques seems to be failed!
+    if settings.CLASSIC_STATE == settings.EVAL_BASED_STATE == settings.TIME_BASED_STATE == settings.FILE_BASED_STATE == False :
+      if settings.INJECTION_CHECKER == False and not settings.CHECK_BOTH_OS:
+        err_msg = "All tested parameters "
+        if menu.options.level > settings.COOKIE_INJECTION_LEVEL:
+          err_msg += "and HTTP headers "
+        err_msg += "appear to be not injectable."
+        if not menu.options.alter_shell :
+          err_msg += " Try to use the option '--alter-shell'"
+        else:
+          err_msg += " Try to remove the option '--alter-shell'"
+        if menu.options.level < settings.HTTP_HEADER_INJECTION_LEVEL :
+          err_msg += " and/or increase '--level' value to perform"
+          err_msg += " more tests"
+        if menu.options.skip_empty:
+          err_msg += " and/or remove the option '--skip-empty'"  
+        err_msg += "."
+        print(settings.print_critical_msg(err_msg))
+        
+    logs.print_logs_notification(filename, url)
+    # if not settings.MULTI_TARGETS:
     #   print(settings.SINGLE_WHITESPACE)
-    raise SystemExit()
+    if not settings.CHECK_BOTH_OS and not settings.MULTI_TARGETS:
+      raise SystemExit()
+
+  except KeyboardInterrupt:
+    checks.user_aborted(filename, url)
+
 # eof

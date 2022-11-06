@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,7 +16,6 @@ For more see the file 'readme/COPYING' for copying permission.
 import re
 import os
 import sys
-import errno
 import random
 from src.thirdparty.six.moves import http_client as _http_client
 # accept overly long result lines
@@ -34,9 +33,11 @@ from src.utils import version
 from src.utils import install
 from src.utils import crawler
 from src.utils import settings
+from src.core.requests import parameters
 from src.utils import session_handler
 from src.utils import simple_http_server
 from src.thirdparty.colorama import Fore, Back, Style, init
+from src.core.testing import smoke_test
 from src.core.requests import tor
 from src.core.requests import proxy
 from src.core.requests import headers
@@ -50,7 +51,7 @@ from src.thirdparty.six.moves import reload_module as _reload_module
 
 # Set default encoding
 _reload_module(sys)
-#sys.setdefaultencoding(settings.UNICODE_ENCODING)
+#sys.setdefaultencoding(settings.DEFAULT_CODEC)
 
 if settings.IS_WINDOWS:
   import codecs
@@ -60,24 +61,94 @@ if settings.IS_WINDOWS:
   init()
 
 """
+Check for custom injection marker (*)
+"""
+def check_custom_injection_marker(url):
+  parameter = ""
+  if url and settings.WILDCARD_CHAR in url:
+    option = "'-u'"
+    settings.WILDCARD_CHAR_APPLIED = True
+    parameter = parameters.do_GET_check(url, http_request_method)
+    parameter = parameters.vuln_GET_param(parameter[0])
+  elif menu.options.data and settings.WILDCARD_CHAR in menu.options.data:
+    option = "POST body"
+    settings.WILDCARD_CHAR_APPLIED = True
+    parameter = parameters.do_POST_check(menu.options.data, http_request_method)
+    parameter = parameters.vuln_POST_param(parameter, url)
+  else:
+    option = "option '--headers/--user-agent/--referer/--cookie'"
+    if menu.options.cookie and settings.WILDCARD_CHAR in menu.options.cookie:
+      settings.WILDCARD_CHAR_APPLIED = True
+      menu.options.level = settings.COOKIE_INJECTION_LEVEL
+      cookie = parameters.do_cookie_check(menu.options.cookie)
+      parameter = parameters.specify_cookie_parameter(cookie)
+
+    elif menu.options.agent and settings.WILDCARD_CHAR in menu.options.agent:
+      settings.WILDCARD_CHAR_APPLIED = True
+      menu.options.level = settings.HTTP_HEADER_INJECTION_LEVEL
+      parameter = "user-agent"
+
+    elif menu.options.referer and settings.WILDCARD_CHAR in menu.options.referer:
+      settings.WILDCARD_CHAR_APPLIED = True
+      menu.options.level = settings.HTTP_HEADER_INJECTION_LEVEL
+      parameter = "referer"
+
+    elif menu.options.headers and settings.WILDCARD_CHAR in menu.options.headers:
+      _ = True
+      for data in menu.options.headers.split("\\n"):
+        # Ignore the Accept HTTP Header
+        if not data.startswith(settings.ACCEPT):
+          _ = False
+      if _:    
+        settings.WILDCARD_CHAR_APPLIED = True
+        menu.options.level = settings.HTTP_HEADER_INJECTION_LEVEL
+        parameter = parameters.specify_custom_header_parameter(settings.WILDCARD_CHAR)
+
+  if settings.WILDCARD_CHAR_APPLIED:
+    if menu.options.test_parameter:
+      if not settings.MULTI_TARGETS or not settings.IS_TTY:
+        err_msg = "The options '-p' and the custom injection marker (" + settings.WILDCARD_CHAR + ") "
+        err_msg += "cannot be used simultaneously (i.e. only one option must be set)."
+        print(settings.print_critical_msg(err_msg))
+        raise SystemExit 
+
+    while True:
+      message = "Custom injection marker (" + settings.WILDCARD_CHAR + ") found in " + option +". "
+      message += "Do you want to process it? [Y/n] > "
+      procced_option = common.read_input(message, default="Y", check_batch=True)
+      if procced_option in settings.CHOICE_YES:
+        menu.options.test_parameter = parameter
+        return
+      elif procced_option in settings.CHOICE_NO:
+        settings.WILDCARD_CHAR_APPLIED = None
+        return
+      elif procced_option in settings.CHOICE_QUIT:
+        raise SystemExit()
+      else:
+        common.invalid_option(procced_option)  
+        pass
+
+"""
 Define HTTP User-Agent header.
 """
 def user_agent_header():
   # Check if defined "--mobile" option.
   if menu.options.mobile:
     if ((menu.options.agent != settings.DEFAULT_USER_AGENT) and not menu.options.requestfile) or menu.options.random_agent:
-      err_msg = "The switch '--mobile' is incompatible with option '--user-agent' or switch '--random-agent'."
-      print(settings.print_critical_msg(err_msg))
-      raise SystemExit()
+      if not settings.MULTI_TARGETS or settings.IS_TTY:
+        err_msg = "The switch '--mobile' is incompatible with option '--user-agent' or switch '--random-agent'."
+        print(settings.print_critical_msg(err_msg))
+        raise SystemExit()
     else:
-      menu.options.agent = menu.mobile_user_agents()
+      menu.options.agent = checks.mobile_user_agents()
 
   # Check if defined "--random-agent" option.
   if menu.options.random_agent:
     if ((menu.options.agent != settings.DEFAULT_USER_AGENT) and not menu.options.requestfile) or menu.options.mobile:
-      err_msg = "The switch '--random-agent' is incompatible with option '--user-agent' or switch '--mobile'."
-      print(settings.print_critical_msg(err_msg))
-      raise SystemExit()
+      if not settings.MULTI_TARGETS or settings.IS_TTY:
+        err_msg = "The switch '--random-agent' is incompatible with option '--user-agent' or switch '--mobile'."
+        print(settings.print_critical_msg(err_msg))
+        raise SystemExit()
     else:
       if settings.VERBOSITY_LEVEL != 0:
         debug_msg = "Fetching random HTTP User-Agent header. "  
@@ -100,7 +171,13 @@ def user_agent_header():
 """
 Examine the request
 """
-def examine_request(request):
+def examine_request(request, url):
+  # Retries when the connection timeouts.
+  if menu.options.retries:
+    settings.MAX_RETRIES = menu.options.retries
+  else:
+    if settings.MULTI_TARGETS:
+      settings.MAX_RETRIES = 1
   try:
     headers.check_http_traffic(request)
     # Check if defined any HTTP Proxy (--proxy option).
@@ -125,68 +202,40 @@ def examine_request(request):
         print(settings.print_critical_msg(err_msg))
         raise SystemExit()
 
-      except Exception as err_msg:
-        if settings.UNAUTHORIZED_ERROR in str(err_msg).lower():
-          if menu.options.ignore_code == settings.UNAUTHORIZED_ERROR:
-            pass
-          elif menu.options.auth_type and menu.options.auth_cred:
-            err_msg = "The provided pair of " + menu.options.auth_type 
-            err_msg += " HTTP authentication credentials '" + menu.options.auth_cred + "'"
-            err_msg += " seems to be invalid."
-            err_msg += " Try to rerun without providing '--auth-cred' and '--auth-type' options,"
-            err_msg += " in order to perform a dictionary-based attack."
-            print(settings.print_critical_msg(err_msg))
-            raise SystemExit()
-          else:
-            pass
-        else:  
-          try:
-            error_msg = str(err_msg.args[0]).split("] ")[1] + "."
-          except IndexError:
-            error_msg = str(err_msg).replace(": "," (") + ")."
-          print(settings.print_critical_msg(error_msg))
-          raise SystemExit()
-
-  except SocketError as e:
-    if e.errno == errno.ECONNRESET:
-      error_msg = "Connection reset by peer."
-      print(settings.print_critical_msg(error_msg))
-    elif e.errno == errno.ECONNREFUSED:
-      error_msg = "Connection refused."
-      print(settings.print_critical_msg(error_msg))
-    raise SystemExit()
-
-  except _urllib.error.HTTPError as err_msg:
-    error_description = ""
-    if len(str(err_msg).split(": ")[1]) == 0:
-      error_description = "Non-standard HTTP status code"
-    err_msg = str(err_msg).replace(": "," (") + error_description + ")." 
-    if menu.options.bulkfile:
-      warn_msg = "Skipping URL '" + url + "' - " + err_msg
-      print(settings.print_warning_msg(warn_msg))
-      if settings.EOF:
-        print(settings.SINGLE_WHITESPACE) 
-      return False  
-    else:
-      print(settings.print_critical_msg(err_msg))
-      raise SystemExit 
-
-  except _urllib.error.URLError as e:
-    err_msg = "Unable to connect to the target URL"
-    try:
-      err_msg += " (" + str(e.args[0]).split("] ")[1] + ")."
-    except IndexError:
-      err_msg += "."
-      pass
-    if menu.options.bulkfile:
-      warn_msg = "Skipping URL '" + url + "' - " + err_msg
-      print(settings.print_warning_msg(warn_msg))
+  except Exception as err_msg:
+    settings.VALID_URL = False
+    reason = ""
+    if settings.UNAUTHORIZED_ERROR in str(err_msg).lower():
+      reason = str(err_msg)
+      if menu.options.ignore_code == settings.UNAUTHORIZED_ERROR:
+        print(settings.print_critical_msg(err_msg))
+      elif menu.options.auth_type and menu.options.auth_cred:
+        err_msg = "The provided pair of " + menu.options.auth_type 
+        err_msg += " HTTP authentication credentials '" + menu.options.auth_cred + "'"
+        err_msg += " seems to be invalid."
+        err_msg += " Try to rerun without providing '--auth-cred' and '--auth-type' options,"
+        err_msg += " in order to perform a dictionary-based attack."
+        print(settings.print_critical_msg(err_msg))
+        raise SystemExit()
+    if settings.INTERNAL_SERVER_ERROR in str(err_msg).lower() or \
+       settings.FORBIDDEN_ERROR in str(err_msg).lower() or \
+       settings.NOT_FOUND_ERROR in str(err_msg).lower():
+      reason = str(err_msg)    
+    if settings.MULTI_TARGETS:
+      if len(reason) != 0:
+        reason = reason + ". Skipping to the next target."
+        print(settings.print_critical_msg(reason))
       if settings.EOF:
         print(settings.SINGLE_WHITESPACE) 
       return False 
     else:
-      print(settings.print_critical_msg(err_msg))
-      raise SystemExit  
+      err_msg = reason
+      if settings.UNAUTHORIZED_ERROR in str(err_msg).lower():
+        pass
+      else:
+        if len(err_msg) != 0:
+          print(settings.print_critical_msg(err_msg)) 
+        raise SystemExit() 
 
 """
 Check internet connection before assessing the target.
@@ -205,7 +254,7 @@ def check_internet(url):
     # Check if defined any HTTP Proxy (--proxy option).
     if menu.options.proxy:
       proxy.do_check(settings.CHECK_INTERNET_ADDRESS)
-    examine_request(request)
+    examine_request(request, url)
   except:
     print(settings.SINGLE_WHITESPACE)
     error_msg = "No internet connection detected."
@@ -215,14 +264,14 @@ def check_internet(url):
 The init (URL) request.
 """
 def init_request(url):
+  # Check connection(s)
+  checks.check_connection(url)
   # Number of seconds to wait before timeout connection
   if settings.VERBOSITY_LEVEL != 0:
       debug_msg = "Setting the HTTP timeout."
       print(settings.print_debug_msg(debug_msg))
   if menu.options.timeout:
     settings.TIMEOUT = menu.options.timeout
-  # Check connection(s)
-  checks.check_connection(url)
   # Define HTTP User-Agent header
   user_agent_header()
   # Check the internet connection (--check-internet switch).
@@ -234,31 +283,12 @@ def init_request(url):
     # Check if defined character used for splitting parameter values.
     if menu.options.pdel and menu.options.pdel in settings.USER_DEFINED_POST_DATA:
       settings.PARAMETER_DELIMITER = menu.options.pdel
-    try:
-      request = _urllib.request.Request(url, menu.options.data.encode())
-    except SocketError as e:
-      if e.errno == errno.ECONNRESET:
-        error_msg = "Connection reset by peer."
-        print(settings.print_critical_msg(error_msg))
-      elif e.errno == errno.ECONNREFUSED:
-        error_msg = "Connection refused."
-        print(settings.print_critical_msg(error_msg))
-      raise SystemExit()
+    request = _urllib.request.Request(url, menu.options.data.encode())
   else:
     # Check if defined character used for splitting parameter values.
     if menu.options.pdel and menu.options.pdel in url:
       settings.PARAMETER_DELIMITER = menu.options.pdel
-    try:
-      request = _urllib.request.Request(url)
-    except SocketError as e:
-      if e.errno == errno.ECONNRESET:
-        error_msg = "Connection reset by peer."
-        print(settings.print_critical_msg(error_msg))
-      elif e.errno == errno.ECONNREFUSED:
-        error_msg = "Connection refused."
-        print(settings.print_critical_msg(error_msg))
-      raise SystemExit()
-
+    request = _urllib.request.Request(url)
   headers.do_check(request)
   # Check if defined any HTTP Proxy (--proxy option).
   if menu.options.proxy:
@@ -267,10 +297,10 @@ def init_request(url):
     debug_msg = "Creating " + str(settings.SCHEME).upper() + " requests opener object."
     print(settings.print_debug_msg(debug_msg))
   # Used a valid pair of valid credentials
-  if menu.options.auth_cred and menu.options.auth_type:
-    info_msg = "Using '" + menu.options.auth_cred + "' pair of " + menu.options.auth_type 
-    info_msg += " HTTP authentication credentials."
-    print(settings.print_info_msg(info_msg))
+  if menu.options.auth_cred and menu.options.auth_type and settings.VERBOSITY_LEVEL !=0 :
+    debug_msg = "Using '" + menu.options.auth_cred + "' pair of " + menu.options.auth_type 
+    debug_msg += " HTTP authentication credentials."
+    print(settings.print_debug_msg(debug_msg))
   return request
 
 """
@@ -282,10 +312,10 @@ def url_response(url):
   # Check if defined Tor (--tor option).
   if menu.options.tor and settings.TOR_CHECK_AGAIN:
     tor.do_check()
-  if menu.options.bulkfile:
+  if settings.MULTI_TARGETS or settings.CRAWLING:
     settings.TOR_CHECK_AGAIN = False
-    info_msg = "Setting URL '" + url + "' for tests. "  
-    print(settings.print_info_msg(info_msg))
+    # initiate total of requests
+    settings.TOTAL_OF_REQUESTS = 0
   request = init_request(url)
   if settings.CHECK_INTERNET:
     settings.CHECK_INTERNET = False
@@ -295,10 +325,10 @@ def url_response(url):
     sys.stdout.flush()
     if settings.VERBOSITY_LEVEL >= 2:
       print(settings.SINGLE_WHITESPACE)
-  response = examine_request(request)
+  response = examine_request(request, url)
   # Check for URL redirection
   if not menu.options.ignore_redirects:
-    url = redirection.do_check(url)
+    url = redirection.do_check(request, url)
   return response, url
 
 """
@@ -323,46 +353,13 @@ def init_injection(url):
     settings.TIME_RELATIVE_ATTACK = False
 
 """
-Logs filename creation.
-"""
-def logs_filename_creation():
-  if menu.options.output_dir:
-    if os.path.isdir(menu.options.output_dir):
-      output_dir = menu.options.output_dir
-      if not output_dir.endswith("/"):
-        output_dir = output_dir + "/"
-    else:
-      error_msg = "The '" + menu.options.output_dir + "' is not directory."
-      print(settings.print_critical_msg(error_msg))
-      raise SystemExit()
-  else:
-    output_dir = settings.OUTPUT_DIR
-  
-  # One directory up, if the script is being run under "/src".
-  output_dir = os.path.dirname(output_dir)
- 
-  try:
-    os.stat(output_dir)
-  except:
-    try:
-      os.mkdir(output_dir)   
-    except OSError as err_msg:
-      try:
-        error_msg = str(err_msg).split("] ")[1] + "."
-      except IndexError:
-        error_msg = str(err_msg) + "."
-      print(settings.print_critical_msg(error_msg))
-      raise SystemExit()
-
-  # The logs filename construction.
-  filename = logs.create_log_file(url, output_dir)
-  return filename
-
-"""
 The main function.
 """
 def main(filename, url):
   try:
+    if menu.options.offline:
+      settings.CHECK_FOR_UPDATES_ON_START = False
+
     # Ignore the mathematic calculation part (Detection phase).
     if menu.options.skip_calc:
       settings.SKIP_CALC = True
@@ -371,15 +368,35 @@ def main(filename, url):
     if menu.options.url_reload and menu.options.data:
       settings.URL_RELOAD = True
 
-    if menu.options.header is not None and settings.INJECT_TAG in menu.options.header or \
-       menu.options.headers is not None and settings.INJECT_TAG in menu.options.headers:
-      info_msg = "Injection marker found in option '--header(s)/--user-agent/--referer/--cookie'."
-      print(settings.print_info_msg(info_msg))
-      if menu.options.test_parameter:
-        err_msg = "The options '-p' and the injection marker cannot be used "
-        err_msg += "simultaneously (i.e. only one option must be set)."
-        print(settings.print_critical_msg(err_msg))
-        raise SystemExit
+    if settings.WILDCARD_CHAR_APPLIED and settings.MULTI_TARGETS or not settings.IS_TTY:
+      settings.WILDCARD_CHAR_APPLIED = False
+
+    check_custom_injection_marker(url)
+
+    # Define the level of tests to perform.
+    if menu.options.level == settings.DEFAULT_INJECTION_LEVEL:
+      settings.SEPARATORS = sorted(set(settings.SEPARATORS_LVL1), key=settings.SEPARATORS_LVL1.index)
+      settings.PREFIXES = sorted(set(settings.PREFIXES_LVL1), key=settings.PREFIXES_LVL1.index)
+      settings.SUFFIXES = sorted(set(settings.SUFFIXES_LVL1), key=settings.SUFFIXES_LVL1.index)
+      settings.EVAL_PREFIXES = sorted(set(settings.EVAL_PREFIXES_LVL1), key=settings.EVAL_PREFIXES_LVL1.index)
+      settings.EVAL_SUFFIXES = sorted(set(settings.EVAL_SUFFIXES_LVL1), key=settings.EVAL_SUFFIXES_LVL1.index)
+    elif menu.options.level == settings.COOKIE_INJECTION_LEVEL:
+      settings.SEPARATORS = sorted(set(settings.SEPARATORS_LVL2), key=settings.SEPARATORS_LVL2.index)
+      settings.PREFIXES = sorted(set(settings.PREFIXES_LVL2), key=settings.PREFIXES_LVL2.index)
+      settings.SUFFIXES = sorted(set(settings.SUFFIXES_LVL2), key=settings.SUFFIXES_LVL2.index)
+      settings.EVAL_PREFIXES = sorted(set(settings.EVAL_PREFIXES_LVL2), key=settings.EVAL_PREFIXES_LVL2.index)
+      settings.EVAL_SUFFIXES = sorted(set(settings.EVAL_SUFFIXES_LVL2), key=settings.EVAL_SUFFIXES_LVL2.index)
+    elif menu.options.level == settings.HTTP_HEADER_INJECTION_LEVEL:
+      settings.SEPARATORS = sorted(set(settings.SEPARATORS_LVL3), key=settings.SEPARATORS_LVL3.index)
+      settings.PREFIXES = sorted(set(settings.PREFIXES_LVL3), key=settings.PREFIXES_LVL3.index)
+      settings.SUFFIXES = sorted(set(settings.SUFFIXES_LVL3), key=settings.SUFFIXES_LVL3.index)
+      settings.EVAL_PREFIXES = sorted(set(settings.EVAL_PREFIXES_LVL3), key=settings.EVAL_PREFIXES_LVL3.index)
+      settings.EVAL_SUFFIXES = sorted(set(settings.EVAL_SUFFIXES_LVL3), key=settings.EVAL_SUFFIXES_LVL3.index)
+    else:
+      err_msg = "The value for option '--level' "
+      err_msg += "must be an integer value from range [1, 3]."
+      print(settings.print_critical_msg(err_msg))
+      raise SystemExit()
 
     if menu.options.test_parameter and menu.options.skip_parameter:
       if type(menu.options.test_parameter) is bool:
@@ -411,7 +428,8 @@ def main(filename, url):
           settings.TEST_PARAMETER[i] = settings.TEST_PARAMETER[i].split("=")[0]
           
     # Check injection level, due to the provided testable parameters.
-    if menu.options.level < 2 and menu.options.test_parameter != None:
+    if menu.options.level == settings.DEFAULT_INJECTION_LEVEL and \
+    menu.options.test_parameter != None:
       checks.check_injection_level()
 
     # Check if defined character used for splitting cookie values.
@@ -463,13 +481,6 @@ def main(filename, url):
     if not menu.options.tech:
       menu.options.tech = "".join(settings.AVAILABLE_TECHNIQUES)
     
-    # Check if specified wrong alternative shell
-    if menu.options.alter_shell:
-      if menu.options.alter_shell.lower() not in settings.AVAILABLE_SHELLS:
-        err_msg = "'" + menu.options.alter_shell + "' shell is not supported!"
-        print(settings.print_critical_msg(err_msg))
-        raise SystemExit()
-
     # Check the file-destination
     if menu.options.file_write and not menu.options.file_dest or \
     menu.options.file_upload  and not menu.options.file_dest:
@@ -485,26 +496,23 @@ def main(filename, url):
     # Check if defined "--url" or "-m" option.
     if url:
       if menu.options.auth_cred and menu.options.auth_type:
-        info_msg = "Used a valid pair of " + menu.options.auth_type 
-        info_msg += " HTTP authentication credentials '" + menu.options.auth_cred + "'." 
-        print(settings.print_bold_info_msg(info_msg))
+        if settings.VERBOSITY_LEVEL != 0:
+          debug_msg = "Used a valid pair of " + menu.options.auth_type 
+          debug_msg += " HTTP authentication credentials '" + menu.options.auth_cred + "'." 
+          print(settings.print_bold_debug_msg(debug_msg))
         session_handler.import_valid_credentials(url, authentication_type=menu.options.auth_type, \
                                                  admin_panel=url, username=menu.options.auth_cred.split(":")[0], \
                                                  password=menu.options.auth_cred.split(":")[1]
                                                  )
-      # Load the crawler
-      if menu.options.crawldepth > 0 or menu.options.sitemap_url:  
-        url = crawler.crawler(url)
       try:
         if menu.options.flush_session:
           session_handler.flush(url)
         # Check for CGI scripts on url
         checks.check_CGI_scripts(url)
         # Modification on payload
-        if not menu.options.shellshock:
-          if not settings.USE_BACKTICKS:
-            settings.SYS_USERS  = "echo $(" + settings.SYS_USERS + ")"
-            settings.SYS_PASSES  = "echo $(" + settings.SYS_PASSES + ")"
+        # if not menu.options.shellshock and not settings.USE_BACKTICKS and not settings.MULTI_TARGETS:
+        #   settings.SYS_USERS  = checks.add_command_substitution(settings.SYS_USERS)
+        #   settings.SYS_PASSES = checks.add_command_substitution(settings.SYS_PASSES)
         # Check if defined "--file-upload" option.
         if menu.options.file_upload:
           checks.file_upload()
@@ -514,7 +522,7 @@ def main(filename, url):
             print(settings.print_critical_msg(str(err_msg.code)))
             raise SystemExit()
           except _urllib.error.URLError as err_msg:
-            print(settings.print_critical_msg(str(err_msg.args[0]).split("] ")[1] + "."))
+            print(settings.print_critical_msg(str(err_msg.reason) + "."))
             raise SystemExit()
         try:
           info_msg = "Performing identification checks to the target URL."
@@ -541,57 +549,13 @@ def main(filename, url):
             checks.check_wrong_flags() 
           else:
             found_os_server = checks.user_defined_os()
-        except KeyError:
-          pass
-        except AttributeError:
+        except (KeyError, AttributeError):
           pass
         # Load tamper scripts
         if menu.options.tamper:
-          checks.tamper_scripts()
+          settings.USER_SUPPLIED_TAMPER = menu.options.tamper
+          # checks.tamper_scripts(stored_tamper_scripts=False)
           
-      except _urllib.error.HTTPError as err_msg:
-        # Check the codes of responses
-        if str(err_msg.getcode()) == settings.INTERNAL_SERVER_ERROR:
-          print(settings.SINGLE_WHITESPACE)
-          content = err_msg.read()
-          raise SystemExit()
-        
-        # Invalid permission to access target URL page.
-        elif str(err_msg.getcode()) == settings.FORBIDDEN_ERROR:
-          if settings.VERBOSITY_LEVEL < 2:
-            print(settings.SINGLE_WHITESPACE)
-          err_msg = "You don't have permission to access this page."
-          print(settings.print_critical_msg(err_msg))
-          raise SystemExit()
-        
-        # The target host seems to be down!
-        elif str(err_msg.getcode()) == settings.NOT_FOUND_ERROR:
-          if settings.VERBOSITY_LEVEL < 2:
-            print(settings.SINGLE_WHITESPACE)
-          err_msg = "Not found."
-          print(settings.print_critical_msg(err_msg))
-          raise SystemExit()
-
-        else:
-          raise
-
-      # The target host seems to be down!
-      except (_urllib.error.URLError, _http_client.BadStatusLine) as e:
-        if settings.VERBOSITY_LEVEL < 2:
-          print(settings.SINGLE_WHITESPACE)
-        err_msg = "The host seems to be down"
-        try:
-          err_msg += " (" + str(e.args[0]).split("] ")[1] + ")."
-        except IndexError:
-          err_msg += "."
-          pass
-        print(settings.print_critical_msg(err_msg))
-        raise SystemExit()
-
-      except _http_client.InvalidURL as err_msg:
-        print(settings.print_critical_msg(err_msg))
-        raise SystemExit()
-
       except AttributeError:
         pass
 
@@ -604,14 +568,6 @@ def main(filename, url):
     if menu.options.enum_all:
       checks.enable_all_enumeration_options()
 
-    # Launch injection and exploitation controller.
-    if len(settings.HTTP_METHOD) != 0:
-      http_request_method = settings.HTTP_METHOD
-    else:
-      if menu.options.data:
-        http_request_method = settings.HTTPMETHOD.POST
-      else:
-        http_request_method = settings.HTTPMETHOD.GET
     controller.do_check(url, http_request_method, filename)
     return filename
 
@@ -623,10 +579,10 @@ def main(filename, url):
     err_msg += " Please ensure that is up and try again."
     print("\n" + settings.print_critical_msg(err_msg))
     logs.print_logs_notification(filename, url)      
-    #session_handler.clear(url)  
-    #raise SystemExit()
 
 try:
+  filename = ""
+
   # Check if defined "--version" option.
   if menu.options.version:
     version.show_version()
@@ -637,7 +593,15 @@ try:
 
   # Get total number of days from last update
   if os.path.isfile(settings.SETTINGS_PATH):
-    common.days_from_last_update()
+    if settings.STABLE_RELEASE == False:
+      common.days_from_last_update()
+
+  # Check if specified wrong alternative shell
+  if menu.options.alter_shell:
+    if menu.options.alter_shell.lower() not in settings.AVAILABLE_SHELLS:
+      err_msg = "'" + menu.options.alter_shell + "' shell is not supported!"
+      print(settings.print_critical_msg(err_msg))
+      raise SystemExit()
 
   # Define the level of verbosity.
   if menu.options.verbose > 4:
@@ -648,10 +612,13 @@ try:
   else:  
     settings.VERBOSITY_LEVEL = menu.options.verbose
 
-  if not menu.options.batch:
-    settings.OS_CHECKS_NUM = 1
-  for os_checks_num in range(0, int(settings.OS_CHECKS_NUM)):
+  if menu.options.smoke_test:
+    smoke_test()
 
+  if not settings.IS_TTY or settings.CRAWLING or menu.options.bulkfile or menu.options.shellshock:
+    settings.OS_CHECKS_NUM = 1
+
+  for os_checks_num in range(0, int(settings.OS_CHECKS_NUM)):
     # Check if defined "--list-tampers" option.
     if menu.options.list_tampers:
       checks.list_tamper_scripts()
@@ -676,8 +643,15 @@ try:
       install.installer()
       raise SystemExit()
 
+    if not sys.stdin.isatty():
+      settings.IS_TTY = False
+
+    # Check if defined "--purge" option.
+    if menu.options.purge:
+      purge.purge()
+
     # Check for missing mandatory option(s).
-    if not any((menu.options.url, menu.options.logfile, menu.options.bulkfile, \
+    if settings.IS_TTY and not any((menu.options.url, menu.options.logfile, menu.options.bulkfile, \
                 menu.options.requestfile, menu.options.sitemap_url, menu.options.wizard, \
                 menu.options.update, menu.options.list_tampers, menu.options.purge, menu.options.noncore_dependencies)):
       err_msg = "Missing a mandatory option (-u, -l, -m, -r, -x, --wizard, --update, --list-tampers, --purge or --dependencies). "
@@ -685,15 +659,15 @@ try:
       print(settings.print_critical_msg(err_msg))
       raise SystemExit()
 
-    if menu.options.encoding:
-      if menu.options.encoding.lower() not in settings.ENCODING_LIST:
-        err_msg = "The provided charset '"  + menu.options.encoding + "' is unknown. "
+    if menu.options.codec:
+      if menu.options.codec.lower() not in settings.ENCODING_LIST:
+        err_msg = "The provided charset '"  + menu.options.codec + "' is unknown. "
         err_msg += "Please visit 'http://docs.python.org/library/codecs.html#standard-encodings' "
         err_msg += "to get the full list of supported charsets."
         print(settings.print_critical_msg(err_msg))
         raise SystemExit()
       else:
-        settings.DEFAULT_PAGE_ENCODING = menu.options.encoding.lower()
+        settings.DEFAULT_CODEC  = menu.options.codec.lower()
 
     if menu.options.header and len(menu.options.header.split("\\n"))> 1:
         warn_msg = "Swithing '--header' to '--headers' "
@@ -702,6 +676,9 @@ try:
 
     if menu.options.method:
       settings.HTTP_METHOD = menu.options.method
+
+    if menu.options.answers:
+      settings.ANSWERS = menu.options.answers
 
     # Check if defined "--proxy" option.
     if menu.options.proxy:
@@ -737,13 +714,6 @@ try:
         print(settings.print_critical_msg(err_msg))
         raise SystemExit()
 
-    # Check if defined "--purge" option.
-    if menu.options.purge:
-      purge.purge()
-      if not any((menu.options.url, menu.options.logfile, menu.options.bulkfile, \
-                  menu.options.requestfile, menu.options.sitemap_url, menu.options.wizard)):
-        raise SystemExit()
-
     # Check the user-defined OS.
     if menu.options.os:
       checks.user_defined_os()
@@ -760,24 +730,19 @@ try:
       print(settings.print_critical_msg(err_msg))
       raise SystemExit()
 
-    if menu.options.wizard:
+    if menu.options.wizard and settings.IS_TTY:
       if not menu.options.url:
         while True:
-          question_msg = "Please enter full target URL (-u) > "
-          menu.options.url = _input(settings.print_question_msg(question_msg))
-          if len(menu.options.url) == 0:
+          message = "Please enter full target URL (-u) > "
+          menu.options.url = common.read_input(message, default=None, check_batch=True)
+          if menu.options.url is None or len(menu.options.url) == 0:
             pass
           else: 
             break
-      if not menu.options.data:
-        question_msg = "Please enter POST data (--data) [Enter for none] > "
-        menu.options.data = _input(settings.print_question_msg(question_msg))
-        if len(menu.options.data) == 0:
-          menu.options.data = False
-
-    # Retries when the connection timeouts.
-    if menu.options.retries:
-      settings.MAX_RETRIES = menu.options.retries
+      message = "Please enter POST data (--data) [Enter for none] > "
+      menu.options.data = common.read_input(message, default=None, check_batch=True)
+      if menu.options.data is not None and len(menu.options.data) == 0:
+        menu.options.data = False
 
     # Seconds to delay between each HTTP request.
     if menu.options.delay > 0:
@@ -799,8 +764,14 @@ try:
     else:
       settings.LOCAL_HTTP_IP = None  
 
+    if menu.options.sitemap_url:
+      settings.SITEMAP_CHECK = True
+
+    if menu.options.crawldepth > 0 or settings.SITEMAP_CHECK:
+      settings.CRAWLING = True
+
     # Check arguments
-    if len(sys.argv) == 1:
+    if len(sys.argv) == 1 and settings.IS_TTY:
       menu.parser.print_help()
       print(settings.SINGLE_WHITESPACE)
       raise SystemExit()
@@ -810,13 +781,25 @@ try:
       if inject_tag_regex_match:
         settings.INJECT_TAG = inject_tag_regex_match.group(0)
 
-    # Define the level of tests to perform.
-    if menu.options.level > 3:
-      err_msg = "The value for option '--level' "
-      err_msg += "must be an integer value from range [1, 3]."
-      print(settings.print_critical_msg(err_msg))
-      raise SystemExit()
+    # Check provided parameters for tests
+    if menu.options.test_parameter or menu.options.skip_parameter:     
+      if menu.options.test_parameter != None :
+        if menu.options.test_parameter.startswith("="):
+          menu.options.test_parameter = menu.options.test_parameter[1:]
+        settings.TEST_PARAMETER = menu.options.test_parameter.split(settings.PARAMETER_SPLITTING_REGEX)  
+      
+      elif menu.options.skip_parameter != None :
+        if menu.options.skip_parameter.startswith("="):
+          menu.options.skip_parameter = menu.options.skip_parameter[1:]
+        settings.TEST_PARAMETER = menu.options.skip_parameter.split(settings.PARAMETER_SPLITTING_REGEX)
 
+      for i in range(0,len(settings.TEST_PARAMETER)):
+        if "=" in settings.TEST_PARAMETER[i]:
+          settings.TEST_PARAMETER[i] = settings.TEST_PARAMETER[i].split("=")[0]
+
+    if menu.options.level != settings.DEFAULT_INJECTION_LEVEL:
+      settings.USER_SUPPLIED_LEVEL = menu.options.level
+      
     # Define the local path where Metasploit Framework is installed.
     if menu.options.msf_path:
       settings.METASPLOIT_PATH = menu.options.msf_path
@@ -832,108 +815,133 @@ try:
     elif menu.options.requestfile or menu.options.logfile:
       parser.logfile_parser()
 
-    if menu.options.offline:
-      settings.CHECK_FOR_UPDATES_ON_START = False
-      
     # Check if ".git" exists and check for updated version!
     if os.path.isdir("./.git") and settings.CHECK_FOR_UPDATES_ON_START:
       update.check_for_update()
 
-    # Check if option is "-m" for multiple urls test.
-    if menu.options.bulkfile:
-      bulkfile = menu.options.bulkfile
-      info_msg = "Parsing targets using the '" + os.path.split(bulkfile)[1] + "' file. "
-      sys.stdout.write(settings.print_info_msg(info_msg))
-      sys.stdout.flush()
-      if not os.path.exists(bulkfile):
-        print(settings.SINGLE_WHITESPACE)
-        err_msg = "It seems that the '" + os.path.split(bulkfile)[1] + "' file, does not exist."
-        sys.stdout.write(settings.print_critical_msg(err_msg) + "\n")
-        sys.stdout.flush()
-        raise SystemExit()
-      elif os.stat(bulkfile).st_size == 0:
-        print(settings.SINGLE_WHITESPACE)
-        err_msg = "It seems that the '" + os.path.split(bulkfile)[1] + "' file, is empty."
-        sys.stdout.write(settings.print_critical_msg(err_msg) + "\n")
-        sys.stdout.flush()
-        raise SystemExit()
-      else:
-        print(settings.SINGLE_WHITESPACE)
-        with open(menu.options.bulkfile) as f:
-          bulkfile = [url.strip() for url in f]
-        # Removing duplicates from list.
-        clean_bulkfile = []
-        [clean_bulkfile.append(x) for x in bulkfile if x not in clean_bulkfile]
-        # Removing empty elements from list.
-        clean_bulkfile = [x for x in clean_bulkfile if x]
-        for url in clean_bulkfile:
-          settings.INIT_TEST = True
-          if url == clean_bulkfile[-1]:
-            settings.EOF = True
-          # Reset the injection level
-          if menu.options.level > 3:
-            menu.options.level = 1
-          init_injection(url)
-          try:
-            response, url = url_response(url)
-            if response != False:
-              filename = logs_filename_creation()
-              main(filename, url)
+    # Check if option is "--url" for single url test.
+    if menu.options.sitemap_url:
+      url = menu.options.sitemap_url
+    else:  
+      url = menu.options.url
 
-          except _urllib.error.HTTPError as err_msg:
-            if settings.VERBOSITY_LEVEL < 2:
-              print(settings.SINGLE_WHITESPACE)
-            error_description = ""
-            if len(str(err_msg).split(": ")[1]) == 0:
-              error_description = "Non-standard HTTP status code" 
-            err_msg = str(err_msg).replace(": "," (") + error_description + ")." 
-            warn_msg = "Skipping URL '" + url + "' - " + err_msg
-            print(settings.print_warning_msg(warn_msg))
-            if settings.EOF:
-              print(settings.SINGLE_WHITESPACE) 
-
-          except _urllib.error.URLError as err_msg:
-            if settings.VERBOSITY_LEVEL < 2:
-              print(settings.SINGLE_WHITESPACE)
-            err_msg = str(err_msg.args[0]).split("] ")[1] + "." 
-            warn_msg = "Skipping URL '" + url + "' - " + err_msg
-            print(settings.print_warning_msg(warn_msg))
-            if settings.EOF:
-              print(settings.SINGLE_WHITESPACE) 
-
-    else:
+    if settings.IS_TTY and not menu.options.bulkfile and not settings.CRAWLING:
+      http_request_method  = checks.check_http_method(url)
       if os_checks_num == 0:
         settings.INIT_TEST = True
-      # Check if option is "--url" for single url test.
-      if menu.options.sitemap_url:
-        url = menu.options.sitemap_url
-      else:  
-        url = menu.options.url
       response, url = url_response(url)
       if response != False:
-        filename = logs_filename_creation()
+        filename = logs.logs_filename_creation(url)
         main(filename, url)
 
+    else:
+      output_href = []
+      # Check if option is "-m" for multiple urls test.
+      if menu.options.bulkfile:
+        bulkfile = menu.options.bulkfile
+        if os_checks_num == 0:
+          info_msg = "Parsing targets using the '" + os.path.split(bulkfile)[1] + "' file. "
+          sys.stdout.write(settings.print_info_msg(info_msg))
+          sys.stdout.flush()
+        if not os.path.exists(bulkfile):
+          print(settings.SINGLE_WHITESPACE)
+          err_msg = "It seems that the '" + os.path.split(bulkfile)[1] + "' file, does not exist."
+          sys.stdout.write(settings.print_critical_msg(err_msg) + "\n")
+          sys.stdout.flush()
+          raise SystemExit()
+        elif os.stat(bulkfile).st_size == 0:
+          print(settings.SINGLE_WHITESPACE)
+          err_msg = "It seems that the '" + os.path.split(bulkfile)[1] + "' file, is empty."
+          sys.stdout.write(settings.print_critical_msg(err_msg) + "\n")
+          sys.stdout.flush()
+          raise SystemExit()
+        else:
+          settings.MULTI_TARGETS = True
+          print(settings.SINGLE_WHITESPACE)
+          with open(menu.options.bulkfile) as f:
+            bulkfile = [url.strip() for url in f]
+      
+      # Check if option "--crawl" is enabled.
+      if settings.CRAWLING and settings.IS_TTY:
+        settings.CRAWLING_PHASE = True
+        url_num = 1
+        if not menu.options.bulkfile:
+          crawling_list = 1
+          output_href = crawler.crawler(url, url_num, crawling_list)
+          output_href.append(url)
+        else:
+          crawling_list = len(bulkfile)
+          for url in bulkfile:
+            output_href += (crawler.crawler(url, url_num, crawling_list))
+            url_num += 1
+          output_href = output_href + bulkfile
+          output_href = [x for x in output_href if x not in settings.HREF_SKIPPED]
+        if not menu.options.shellshock:
+          output_href = crawler.normalize_results(output_href)
+        settings.CRAWLING_PHASE = False
+      else:
+        filename = None
+        if settings.IS_TTY:
+          output_href = output_href + bulkfile
+        else:
+          if os_checks_num == 0:
+            info_msg = "Using 'stdin' for parsing targets list."
+            print(settings.print_info_msg(info_msg))
+          menu.options.batch = True
+          bulkfile = sys.stdin
+          settings.MULTI_TARGETS = True
+          for url in bulkfile:
+            if re.search(r"\b(https?://[^\s'\"]+|[\w.]+\.\w{2,3}[/\w+]*\?[^\s'\"]+)", url, re.I):
+              output_href.append(url.rstrip())
+
+      # Removing duplicates from list.
+      clean_output_href = []
+      [clean_output_href.append(x) for x in output_href if x not in clean_output_href]
+      # Removing empty elements from list.
+      clean_output_href = [x for x in clean_output_href if x]
+      if len(output_href) != 0 and settings.IS_TTY:
+        if filename is not None:
+          filename = crawler.store_crawling(output_href)
+        info_msg = "Found a total of " + str(len(clean_output_href)) + " target"+ "s"[len(clean_output_href) == 1:] + "."
+        print(settings.print_info_msg(info_msg))
+      url_num = 0
+      for url in clean_output_href:
+        http_request_method  = checks.check_http_method(url)
+        if (settings.CRAWLING and re.search(r"(.*?)\?(.+)", url) or menu.options.shellshock) or settings.MULTI_TARGETS:
+          url_num += 1
+          print(settings.print_message("[" + str(url_num) + "/" + str(len(clean_output_href)) + "] URL - " + url) + "")
+          message = "Do you want to use URL #" + str(url_num) + " to perform tests? [Y/n] > "
+          message = common.read_input(message, default="Y", check_batch=True)
+          if message in settings.CHOICE_YES:
+            if os_checks_num == 0:
+              settings.INIT_TEST = True
+            if url == clean_output_href[-1]:
+              settings.EOF = True
+            # Reset the injection level
+            if menu.options.level > settings.HTTP_HEADER_INJECTION_LEVEL:
+              menu.options.level = 1
+            init_injection(url)
+            try:
+              response, url = url_response(url)
+              if response != False:
+                filename = logs.logs_filename_creation(url)
+                main(filename, url)
+            except:
+              pass 
+          elif message in settings.CHOICE_NO:
+            pass 
+          elif message in settings.CHOICE_QUIT:
+            raise SystemExit()
+
 except KeyboardInterrupt:
-  abort_msg = "User aborted procedure "
-  abort_msg += "during the " + checks.assessment_phase() 
-  abort_msg += " phase (Ctrl-C was pressed)."
-  new_line = "\n"
-  # if settings.FILE_BASED_STATE or \
-  #    settings.TEMPFILE_BASED_STATE :
-  #    if not settings.DETECTION_PHASE and \
-  #       settings.EXPLOITATION_PHASE:
-  #     if settings.VERBOSITY_LEVEL != 0: 
-  #       new_line = ""
-  print(new_line + settings.print_abort_msg(abort_msg))
   try:
-    logs.print_logs_notification(filename, url)
-    print(settings.SINGLE_WHITESPACE)
+    checks.user_aborted(filename, url)
   except NameError:
+    abort_msg = "User quit (Ctrl-C was pressed)."
+    print(settings.print_abort_msg(abort_msg))
     raise SystemExit()
 
 except SystemExit: 
-  print(settings.SINGLE_WHITESPACE)
   raise SystemExit()
 
 except EOFError:

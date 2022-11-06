@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -88,18 +88,19 @@ def logfile_parser():
         settings.RAW_HTTP_HEADERS = settings.RAW_HTTP_HEADERS[1:]
         settings.RAW_HTTP_HEADERS = settings.RAW_HTTP_HEADERS[:-1]
         settings.RAW_HTTP_HEADERS = '\\n'.join(settings.RAW_HTTP_HEADERS)
+
+      if os.stat(request_file).st_size != 0:
+        with open(request_file, 'r') as file:
+          request = file.read()
+      else:
+        invalid_data(request_file)
+        
     except IOError as err_msg:
       error_msg = "The '" + request_file + "' "
       error_msg += str(err_msg.args[1]).lower() + "."
       print(settings.SINGLE_WHITESPACE)
       print(settings.print_critical_msg(error_msg))
       raise SystemExit()
-
-    if os.stat(request_file).st_size != 0:
-      with open(request_file, 'r') as file:
-        request = file.read()
-    else:
-      invalid_data(request_file)
 
     single_request = True
     pattern = r'HTTP/([\d.]+)'
@@ -117,8 +118,8 @@ def logfile_parser():
     request_url = re.findall(r"" + " (.*) HTTP/", request)
 
     if request_url:
-      # Check last line for POST data
-      if len(request.splitlines()[-1]) != 0:
+      # Check empty line for POST data.
+      if len(request.splitlines()[-2]) == 0:
         result = [item for item in request.splitlines() if item]
         multiple_xml = []
         for item in result:
@@ -149,17 +150,17 @@ def logfile_parser():
       if re.findall(r"Host: " + "(.*)", line):
         menu.options.host = "".join([str(i) for i in re.findall(r"Host: " + "(.*)", line)])
       # User-Agent Header
-      elif re.findall(r"User-Agent: " + "(.*)", line) and not (menu.options.agent or menu.options.mobile):
+      if re.findall(r"User-Agent: " + "(.*)", line):
         menu.options.agent = "".join([str(i) for i in re.findall(r"User-Agent: " + "(.*)", line)])
       # Cookie Header
-      elif re.findall(r"Cookie: " + "(.*)", line):
+      if re.findall(r"Cookie: " + "(.*)", line):
         menu.options.cookie = "".join([str(i) for i in re.findall(r"Cookie: " + "(.*)", line)])
       # Referer Header
-      elif re.findall(r"Referer: " + "(.*)", line):
+      if re.findall(r"Referer: " + "(.*)", line):
         menu.options.referer = "".join([str(i) for i in re.findall(r"Referer: " + "(.*)", line)])
         if menu.options.referer and "https://" in menu.options.referer:
           prefix = "https://"
-      elif re.findall(r"Authorization: " + "(.*)", line):
+      if re.findall(r"Authorization: " + "(.*)", line):
         auth_provided = "".join([str(i) for i in re.findall(r"Authorization: " + "(.*)", line)]).split()
         menu.options.auth_type = auth_provided[0].lower()
         if menu.options.auth_type == "basic":
@@ -193,15 +194,15 @@ def logfile_parser():
     else:
       menu.options.url = prefix + menu.options.host + request_url
       if single_request:
-        sys.stdout.write(settings.SUCCESS_STATUS + "\n")
-        sys.stdout.flush()
-      if menu.options.logfile:
-        info_msg = "Parsed target from '" + os.path.split(request_file)[1] + "' for tests :"
-        print(settings.print_info_msg(info_msg))
-        sub_content = http_method + " " +  prefix + menu.options.host + request_url
+        print(settings.SINGLE_WHITESPACE)
+      if menu.options.logfile and settings.VERBOSITY_LEVEL != 0:
+        sub_content = http_method + settings.SINGLE_WHITESPACE +  prefix + menu.options.host + request_url
         print(settings.print_sub_content(sub_content))
+        if menu.options.cookie:
+           sub_content = "Cookie: " + menu.options.cookie
+           print(settings.print_sub_content(sub_content))
         if menu.options.data:
-           sub_content = "Data: " + menu.options.data
+           sub_content = "POST data: " + menu.options.data
            print(settings.print_sub_content(sub_content))
 
 # eof

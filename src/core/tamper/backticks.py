@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@ from src.utils import settings
 
 """
 About: Uses backticks instead of "$()" for commands substitution on the generated payloads.
-Notes: This tamper script works against *nix targets.
+Notes: This tamper script works against Unix-like target(s).
 """
 
 __tamper__ = "backticks"

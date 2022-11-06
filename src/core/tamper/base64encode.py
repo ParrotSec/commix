@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ def tamper(payload):
   else:
     payload = _urllib.parse.unquote(payload)
     payload = base64.b64encode(payload.encode())
-    payload = payload.decode(settings.UNICODE_ENCODING)
+    payload = payload.decode(settings.DEFAULT_CODEC)
     return payload
 
 # eof 

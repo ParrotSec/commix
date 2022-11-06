@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@ from src.utils import session_handler
 from src.thirdparty.six.moves import http_client as _http_client
 # accept overly long result lines
 _http_client._MAXLINE = 1 * 1024 * 1024
+from src.utils import common
 from src.core.requests import tor
 from src.core.requests import proxy
 from src.core.requests import headers
@@ -45,7 +46,7 @@ def estimate_response_time(url, timesec):
     sys.stdout.flush()
   # Check if defined POST data
   if menu.options.data:
-    request = _urllib.request.Request(url, menu.options.data.encode(settings.UNICODE_ENCODING))
+    request = _urllib.request.Request(url, menu.options.data.encode(settings.DEFAULT_CODEC))
   else:
     url = parameters.get_url_part(url)
     request = _urllib.request.Request(url)
@@ -126,13 +127,8 @@ def estimate_response_time(url, timesec):
                 warn_msg += "HTTP authentication credentials are required."
                 print(settings.print_warning_msg(warn_msg))
                 while True:
-                  if not menu.options.batch:
-                    question_msg = "Do you want to perform a dictionary-based attack? [Y/n] > "
-                    do_update = _input(settings.print_question_msg(question_msg))
-                  else:
-                    do_update = ""  
-                  if len(do_update) == 0:
-                     do_update = "Y" 
+                  message = "Do you want to perform a dictionary-based attack? [Y/n] > "
+                  do_update = common.read_input(message, default="Y", check_batch=True)
                   if do_update in settings.CHOICE_YES:
                     auth_creds = authentication.http_auth_cracker(url, realm)
                     if auth_creds != False:
@@ -146,8 +142,7 @@ def estimate_response_time(url, timesec):
                   elif do_update in settings.CHOICE_QUIT:
                     raise SystemExit()
                   else:
-                    err_msg = "'" + do_update + "' is not a valid answer."  
-                    print(settings.print_error_msg(err_msg))
+                    common.invalid_option(do_update)  
                     pass
 
             # Digest authentication         
@@ -161,13 +156,8 @@ def estimate_response_time(url, timesec):
                   warn_msg = "Heuristics have failed to identify the realm attribute." 
                   print(settings.print_warning_msg(warn_msg))
                 while True:
-                  if not menu.options.batch:
-                    question_msg = "Do you want to perform a dictionary-based attack? [Y/n] > "
-                    do_update = _input(settings.print_question_msg(question_msg))
-                  else:
-                    do_update = ""
-                  if len(do_update) == 0:
-                     do_update = "Y" 
+                  message = "Do you want to perform a dictionary-based attack? [Y/n] > "
+                  do_update = common.read_input(message, default="Y", check_batch=True)
                   if do_update in settings.CHOICE_YES:
                     auth_creds = authentication.http_auth_cracker(url, realm)
                     if auth_creds != False:
@@ -181,8 +171,7 @@ def estimate_response_time(url, timesec):
                   elif do_update in settings.CHOICE_QUIT:
                     raise SystemExit()
                   else:
-                    err_msg = "'" + do_update + "' is not a valid answer."  
-                    print(settings.print_error_msg(err_msg))
+                    common.invalid_option(do_update)  
                     pass
                 else:   
                   checks.http_auth_err_msg()      
@@ -202,7 +191,7 @@ def estimate_response_time(url, timesec):
   except _urllib.error.URLError as err_msg:
     if settings.VERBOSITY_LEVEL != 0:
       print(settings.SINGLE_WHITESPACE)
-    print(settings.print_critical_msg(str(err_msg.args[0]).split("] ")[1] + "."))
+    print(settings.print_critical_msg(str(err_msg.reason) + "."))
     raise SystemExit()
 
   except ValueError as err_msg:
@@ -220,13 +209,13 @@ def estimate_response_time(url, timesec):
     url_time_response = int(diff)
     if settings.TARGET_OS == "win":
       warn_msg = "Due to the relatively slow response of 'cmd.exe' in target "
-      warn_msg += "host, there may be delays during the data extraction procedure."
+      warn_msg += "host, there might be delays during the data extraction procedure."
       print(settings.print_warning_msg(warn_msg))
   else:
     if settings.VERBOSITY_LEVEL != 0:
       print(settings.SINGLE_WHITESPACE)
     url_time_response = int(round(diff))
-    warn_msg = "The estimated response time is " + str(url_time_response)
+    warn_msg = "Target's estimated response time is " + str(url_time_response)
     warn_msg += " second" + "s"[url_time_response == 1:] + ". That may cause" 
     if url_time_response >= 3:
       warn_msg += " serious"
@@ -234,7 +223,7 @@ def estimate_response_time(url, timesec):
     if url_time_response >= 3:
       warn_msg += " and/or possible corruptions over the extracted data"
     warn_msg += "."
-    print(settings.print_bold_warning_msg(warn_msg))
+    print(settings.print_warning_msg(warn_msg))
 
   if int(timesec) == int(url_time_response):
     timesec = int(timesec) + int(url_time_response)
@@ -359,14 +348,18 @@ def cookie_injection(url, vuln_parameter, payload):
     # Check if defined POST data
     if menu.options.data:
       menu.options.data = settings.USER_DEFINED_POST_DATA
-      request = _urllib.request.Request(url, menu.options.data.encode(settings.UNICODE_ENCODING))
+      request = _urllib.request.Request(url, menu.options.data.encode(settings.DEFAULT_CODEC))
     else:
       url = parameters.get_url_part(url)
       request = _urllib.request.Request(url)
     #Check if defined extra headers.
     headers.do_check(request)
     payload = checks.newline_fixation(payload)
-    request.add_header('Cookie', menu.options.cookie.replace(settings.INJECT_TAG, payload.replace("+", "%2B")))
+    payload = payload.replace("+", "%2B")
+    if settings.INJECT_TAG in menu.options.cookie:
+      request.add_header('Cookie', menu.options.cookie.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload))
+    else:
+      request.add_header('Cookie', menu.options.cookie.replace(settings.INJECT_TAG, payload))
     try:
       headers.check_http_traffic(request)
       response = opener.open(request)
@@ -410,7 +403,7 @@ def cookie_injection(url, vuln_parameter, payload):
   # Check if defined Tor.
   elif menu.options.tor:
     try:
-      proxy = _urllib.request.ProxyHandler({settings.SCHEME:settings.PRIVOXY_IP + ":" + settings.PRIVOXY_PORT})
+      proxy = _urllib.request.ProxyHandler({settings.TOR_HTTP_PROXY_SCHEME:settings.TOR_HTTP_PROXY_IP + ":" + settings.TOR_HTTP_PROXY_PORT})
       response = inject_cookie(url, vuln_parameter, payload, proxy)
     except _urllib.error.HTTPError as err_msg:
       if str(err_msg.code) == settings.INTERNAL_SERVER_ERROR or str(err_msg.code) == settings.BAD_REQUEST:
@@ -487,7 +480,7 @@ def user_agent_injection(url, vuln_parameter, payload):
     # Check if defined POST data
     if menu.options.data:
       menu.options.data = settings.USER_DEFINED_POST_DATA
-      request = _urllib.request.Request(url, menu.options.data.encode(settings.UNICODE_ENCODING))
+      request = _urllib.request.Request(url, menu.options.data.encode(settings.DEFAULT_CODEC))
     else:
       url = parameters.get_url_part(url)
       request = _urllib.request.Request(url)
@@ -542,7 +535,7 @@ def user_agent_injection(url, vuln_parameter, payload):
   # Check if defined Tor.
   elif menu.options.tor:
     try:
-      proxy = _urllib.request.ProxyHandler({settings.SCHEME:settings.PRIVOXY_IP + ":" + settings.PRIVOXY_PORT})
+      proxy = _urllib.request.ProxyHandler({settings.TOR_HTTP_PROXY_SCHEME:settings.TOR_HTTP_PROXY_IP + ":" + settings.TOR_HTTP_PROXY_PORT})
       response = inject_user_agent(url, vuln_parameter, payload, proxy)
     except _urllib.error.HTTPError as err_msg:
       if str(err_msg.code) == settings.INTERNAL_SERVER_ERROR or str(err_msg.code) == settings.BAD_REQUEST:
@@ -619,7 +612,7 @@ def referer_injection(url, vuln_parameter, payload):
     # Check if defined POST data
     if menu.options.data:
       menu.options.data = settings.USER_DEFINED_POST_DATA
-      request = _urllib.request.Request(url, menu.options.data.encode(settings.UNICODE_ENCODING))
+      request = _urllib.request.Request(url, menu.options.data.encode(settings.DEFAULT_CODEC))
     else:
       url = parameters.get_url_part(url)
       request = _urllib.request.Request(url)
@@ -674,7 +667,7 @@ def referer_injection(url, vuln_parameter, payload):
   # Check if defined Tor.
   elif menu.options.tor:
     try:
-      proxy = _urllib.request.ProxyHandler({settings.SCHEME:settings.PRIVOXY_IP + ":" + settings.PRIVOXY_PORT})
+      proxy = _urllib.request.ProxyHandler({settings.TOR_HTTP_PROXY_SCHEME:settings.TOR_HTTP_PROXY_IP + ":" + settings.TOR_HTTP_PROXY_PORT})
       response = inject_referer(url, vuln_parameter, payload, proxy)
     except _urllib.error.HTTPError as err_msg:
       if str(err_msg.code) == settings.INTERNAL_SERVER_ERROR or str(err_msg.code) == settings.BAD_REQUEST:
@@ -754,7 +747,7 @@ def host_injection(url, vuln_parameter, payload):
     # Check if defined POST data
     if menu.options.data:
       menu.options.data = settings.USER_DEFINED_POST_DATA
-      request = _urllib.request.Request(url, menu.options.data.encode(settings.UNICODE_ENCODING))
+      request = _urllib.request.Request(url, menu.options.data.encode(settings.DEFAULT_CODEC))
     else:
       url = parameters.get_url_part(url)
       request = _urllib.request.Request(url)
@@ -809,7 +802,7 @@ def host_injection(url, vuln_parameter, payload):
   # Check if defined Tor.
   elif menu.options.tor:
     try:
-      proxy = _urllib.request.ProxyHandler({settings.SCHEME:settings.PRIVOXY_IP + ":" + settings.PRIVOXY_PORT})
+      proxy = _urllib.request.ProxyHandler({settings.TOR_HTTP_PROXY_SCHEME:settings.TOR_HTTP_PROXY_IP + ":" + settings.TOR_HTTP_PROXY_PORT})
       response = inject_host(url, vuln_parameter, payload, proxy)
     except _urllib.error.HTTPError as err_msg:
       if str(err_msg.code) == settings.INTERNAL_SERVER_ERROR or str(err_msg.code) == settings.BAD_REQUEST:
@@ -888,14 +881,17 @@ def custom_header_injection(url, vuln_parameter, payload):
     # Check if defined POST data
     if menu.options.data:
       menu.options.data = settings.USER_DEFINED_POST_DATA
-      request = _urllib.request.Request(url, menu.options.data.encode(settings.UNICODE_ENCODING))
+      request = _urllib.request.Request(url, menu.options.data.encode(settings.DEFAULT_CODEC))
     else:
       url = parameters.get_url_part(url)
       request = _urllib.request.Request(url)
     #Check if defined extra headers.
     headers.do_check(request)
-    payload = checks.newline_fixation(payload) 
-    request.add_header(settings.CUSTOM_HEADER_NAME, payload)
+    payload = checks.newline_fixation(payload)
+    if settings.INJECT_TAG in settings.CUSTOM_HEADER_VALUE:
+      request.add_header(settings.CUSTOM_HEADER_NAME, settings.CUSTOM_HEADER_VALUE.replace(settings.TESTABLE_VALUE + settings.INJECT_TAG, settings.INJECT_TAG).replace(settings.INJECT_TAG, payload))
+    else:
+      request.add_header(settings.CUSTOM_HEADER_NAME, settings.CUSTOM_HEADER_VALUE + payload)
     try:
       headers.check_http_traffic(request)
       response = opener.open(request)
@@ -944,7 +940,7 @@ def custom_header_injection(url, vuln_parameter, payload):
   # Check if defined Tor.
   elif menu.options.tor:
     try:
-      proxy = _urllib.request.ProxyHandler({settings.SCHEME:settings.PRIVOXY_IP + ":" + settings.PRIVOXY_PORT})
+      proxy = _urllib.request.ProxyHandler({settings.TOR_HTTP_PROXY_SCHEME:settings.TOR_HTTP_PROXY_IP + ":" + settings.TOR_HTTP_PROXY_PORT})
       response = inject_custom_header(url, vuln_parameter, payload, proxy)
     except _urllib.error.HTTPError as err_msg:
       if str(err_msg.code) == settings.INTERNAL_SERVER_ERROR or str(err_msg.code) == settings.BAD_REQUEST:
@@ -1010,53 +1006,51 @@ def custom_header_injection(url, vuln_parameter, payload):
 Target's encoding detection
 """
 def encoding_detection(response):
-  if not menu.options.encoding:
-    charset_detected = False
-    if settings.VERBOSITY_LEVEL != 0:
-      debug_msg = "Identifying the indicated web-page charset. " 
-      sys.stdout.write(settings.print_debug_msg(debug_msg))
-      sys.stdout.flush()
+  charset_detected = False
+  if settings.VERBOSITY_LEVEL != 0:
+    debug_msg = "Identifying the indicated web-page charset. " 
+    sys.stdout.write(settings.print_debug_msg(debug_msg))
+    sys.stdout.flush()
+  try:
+    # Detecting charset
     try:
-      # Detecting charset
-      try:
-        # Support for python 2.7.x
-        charset = response.headers.getparam('charset')
-      except AttributeError:
-        # Support for python 3.x
-        charset = response.headers.get_content_charset()
-      if charset != None and len(charset) != 0 :        
+      # Support for python 2.7.x
+      charset = response.headers.getparam('charset')
+    except AttributeError:
+      # Support for python 3.x
+      charset = response.headers.get_content_charset()
+    if charset != None and len(charset) != 0 :        
+      charset_detected = True
+    else:
+      content = re.findall(r"charset=['\"](.*)['\"]", response.read())[0]
+      if len(content) != 0 :
+        charset = content
         charset_detected = True
       else:
-        content = re.findall(r"charset=['\"](.*)['\"]", response.read())[0]
-        if len(content) != 0 :
-          charset = content
-          charset_detected = True
-        else:
-           # Check if HTML5 format
-          charset = re.findall(r"charset=['\"](.*?)['\"]", response.read())[0]
-        if len(charset) != 0 :
-          charset_detected = True
-      # Check the identifyied charset
-      if charset_detected :
-        settings.DEFAULT_PAGE_ENCODING = charset
-        if settings.VERBOSITY_LEVEL != 0:
-          print(settings.SINGLE_WHITESPACE)
-        if settings.DEFAULT_PAGE_ENCODING.lower() not in settings.ENCODING_LIST:
-          warn_msg = "The indicated web-page charset "  + settings.DEFAULT_PAGE_ENCODING + " seems unknown."
-          print(settings.print_warning_msg(warn_msg))
-        else:
-          if settings.VERBOSITY_LEVEL != 0:
-            debug_msg = "The indicated web-page charset appears to be " 
-            debug_msg += settings.DEFAULT_PAGE_ENCODING + Style.RESET_ALL + "."
-            print(settings.print_bold_debug_msg(debug_msg))
+         # Check if HTML5 format
+        charset = re.findall(r"charset=['\"](.*?)['\"]", response.read())[0]
+      if len(charset) != 0 :
+        charset_detected = True
+    # Check the identifyied charset
+    if charset_detected :
+      if settings.VERBOSITY_LEVEL != 0:
+        print(settings.SINGLE_WHITESPACE)
+      if settings.DEFAULT_PAGE_ENCODING.lower() not in settings.ENCODING_LIST:
+        warn_msg = "The indicated web-page charset "  + settings.DEFAULT_PAGE_ENCODING + " seems unknown."
+        print(settings.print_warning_msg(warn_msg))
       else:
-        pass
-    except:
+        if settings.VERBOSITY_LEVEL != 0:
+          debug_msg = "The indicated web-page charset appears to be " 
+          debug_msg += settings.DEFAULT_PAGE_ENCODING + Style.RESET_ALL + "."
+          print(settings.print_bold_debug_msg(debug_msg))
+    else:
       pass
-    if charset_detected == False and settings.VERBOSITY_LEVEL != 0:
-      print(settings.SINGLE_WHITESPACE)
-      warn_msg = "Heuristics have failed to identify indicated web-page charset."
-      print(settings.print_warning_msg(warn_msg))
+  except:
+    pass
+  if charset_detected == False and settings.VERBOSITY_LEVEL != 0:
+    print(settings.SINGLE_WHITESPACE)
+    warn_msg = "Heuristics have failed to identify indicated web-page charset."
+    print(settings.print_warning_msg(warn_msg))
 
 """
 Procedure for target application identification
@@ -1161,7 +1155,7 @@ def check_target_os(server_banner):
     user_defined_os = settings.TARGET_OS
 
   if settings.VERBOSITY_LEVEL != 0:
-    debug_msg = "Identifying the target operating system. " 
+    debug_msg = "Identifying The underlying operating system. " 
     sys.stdout.write(settings.print_debug_msg(debug_msg))
     sys.stdout.flush()
 
@@ -1180,7 +1174,9 @@ def check_target_os(server_banner):
 
         settings.TARGET_OS = identified_os[:3].lower()
         if menu.options.shellshock:
-          err_msg = "The shellshock module is not available for " 
+          if settings.VERBOSITY_LEVEL != 0:
+            print(settings.SINGLE_WHITESPACE)
+          err_msg = "The shellshock module ('--shellshock') is not available for " 
           err_msg += identified_os + " targets."
           print(settings.print_critical_msg(err_msg))
           raise SystemExit()
@@ -1193,7 +1189,7 @@ def check_target_os(server_banner):
   if settings.VERBOSITY_LEVEL != 0 :
     if found_os_server:
       print(settings.SINGLE_WHITESPACE)
-      debug_msg = "The target operating system appears to be " 
+      debug_msg = "The underlying operating system appears to be " 
       debug_msg += identified_os.title() + Style.RESET_ALL + "."
       print(settings.print_bold_debug_msg(debug_msg))
     else:
@@ -1202,27 +1198,26 @@ def check_target_os(server_banner):
       print(settings.print_warning_msg(warn_msg))
 
   if found_os_server == False and not menu.options.os:
-    # If "--shellshock" option is provided then,
-    # by default is a Linux/Unix operating system.
+    # If "--shellshock" option is provided then, by default is a Linux/Unix operating system.
     if menu.options.shellshock:
       pass 
     else:
       if menu.options.batch:
         if not settings.CHECK_BOTH_OS:
           settings.CHECK_BOTH_OS = True
-          check_type = "unix-based"
+          check_type = "Unix-like based"
         elif settings.CHECK_BOTH_OS:
           settings.TARGET_OS = "win"
           settings.CHECK_BOTH_OS = False
           settings.PERFORM_BASIC_SCANS = True
-          check_type = "windows-based"
+          check_type = "windows based"
         info_msg = "Setting the " + check_type + " payloads."
         print(settings.print_info_msg(info_msg))
       else:
         while True:
-          question_msg = "Do you recognise the server's operating system? "
-          question_msg += "[(W)indows/(U)nix/(q)uit] > "
-          got_os = _input(settings.print_question_msg(question_msg))
+          message = "Do you recognise the server's operating system? "
+          message += "[(W)indows/(U)nix-like/(q)uit] > "
+          got_os = common.read_input(message, default="", check_batch=True)
           if got_os.lower() in settings.CHOICE_OS :
             if got_os.lower() == "w":
               settings.TARGET_OS = "win"
@@ -1232,8 +1227,7 @@ def check_target_os(server_banner):
             elif got_os.lower() == "q":
               raise SystemExit()
           else:
-            err_msg = "'" + got_os + "' is not a valid answer."  
-            print(settings.print_error_msg(err_msg))
+            common.invalid_option(got_os)  
             pass
 
 """

